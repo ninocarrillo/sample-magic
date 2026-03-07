@@ -72,7 +72,8 @@ def main():
 		print('Unable to open audio file.')
 		sys.exit(3)
 
-	audio_samples = audio_samples / 32768
+	if (np.max(np.abs(audio_samples))) > 1:
+		audio_samples = audio_samples / 32768
 
 	print(f'Max audio amplitude: {np.max(np.abs(audio_samples)):.3f}')
 
