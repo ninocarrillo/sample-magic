@@ -72,6 +72,10 @@ def main():
 		print('Unable to open audio file.')
 		sys.exit(3)
 
+	audio_samples = audio_samples / 32768
+
+	print(f'Max audio amplitude: {np.max(np.abs(audio_samples)):.3f}')
+
 	audio_sample_count = len(audio_samples)
 
 	# Mix audio with complex carrier freq to move spectrum to baseband
