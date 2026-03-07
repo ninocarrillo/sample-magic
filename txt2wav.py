@@ -70,35 +70,37 @@ def main():
 	audio_sample_rate = baseband_sample_rate * interpolation_rate
 
 	# Open the input text file and read data into a list of complex float values
-	baseband_samples = []
+	baseband_sample_list = []
 	with open(sys.argv[1], encoding="utf-8") as input_file:
 		input_file_lines = input_file.readlines()
 		# The file contains one I/Q sample per line, I and Q separated by space
 		for line in input_file_lines:
 			split_line = line.split()
-			baseband_samples.append([float(split_line[0]), float(split_line[1])])
+			baseband_sample_list.append([float(split_line[0]), float(split_line[1])])
 
-	# Interpolate baseband (upsample)
-	complex_sample_count = len(baseband_samples) * interpolation_rate
-	complex_baseband_samples = np.zeros(len(baseband_samples), dtype=complex)
-	complex_samples = np.zeros(complex_sample_count, dtype=complex)
-	for i in range(len(baseband_samples)):
-		complex_baseband_samples[i] = baseband_samples[i][0] + (baseband_samples[i][1] * 1j)
-		complex_samples[i * interpolation_rate] = complex_baseband_samples[i]
+	# Create complex baseband sample values from the list value pairs
+	baseband_samples = np.zeros(len(baseband_sample_list), dtype=complex)
+	for i in range(len(baseband_sample_list)):
+		baseband_samples[i] = baseband_sample_list[i][0] + (baseband_sample_list[i][1] * 1j)
+
+	# Create expanded baseband by inserting zeros
+	expanded_baseband_samples = np.zeros(len(baseband_samples) * interpolation_rate, dtype=complex)
+	for i in range(len(baseband_sample_list)):
+		expanded_baseband_samples[i * interpolation_rate] = baseband_samples[i]
 
 	# Repeat these samples
-	complex_samples = np.tile(complex_samples, repeat_count)
+	expanded_baseband_samples = np.tile(expanded_baseband_samples, repeat_count)
 
 	# Apply interpolation filter
-	interp_fir = firwin(1023, [65 * baseband_sample_rate / 128], pass_zero='lowpass', fs=audio_sample_rate)
-	complex_samples = np.convolve(complex_samples, interp_fir)
-	complex_sample_count *= repeat_count
+	interp_fir = firwin(2047, [baseband_sample_rate / 2], pass_zero='lowpass', fs=audio_sample_rate)
+	expanded_baseband_samples = np.convolve(expanded_baseband_samples, interp_fir)
+	expanded_baseband_sample_count = len(expanded_baseband_samples)
 
-	audio_samples = np.zeros(complex_sample_count, dtype=complex)
+	audio_samples = np.zeros(expanded_baseband_sample_count, dtype=complex)
 	# Mix complex samples with sine wave at carrier freq to translate spectrum
-	for i in range(complex_sample_count):
+	for i in range(expanded_baseband_sample_count):
 		time_var = 2 * np.pi * i * carrier_freq / audio_sample_rate
-		audio_samples[i] = complex_samples[i] * np.exp(time_var * 1j)
+		audio_samples[i] = expanded_baseband_samples[i] * np.exp(time_var * 1j)
 
 	# Discard complex samples
 	audio_samples = audio_samples.real
@@ -106,32 +108,48 @@ def main():
 	# Scale audio samples
 	audio_samples = audio_samples * interpolation_rate
 
-	# Perform FFT of final audio signal
+	# Perform FFT analysis of modulation stages
+	baseband_psd = AnalyzeSpectrum(baseband_samples, baseband_sample_rate, 0.99)
 	audio_psd = AnalyzeSpectrum(audio_samples, audio_sample_rate, 0.99)
-	baseband_psd = AnalyzeSpectrum(complex_baseband_samples, baseband_sample_rate, 0.99)
+	expanded_baseband_psd = AnalyzeSpectrum(expanded_baseband_samples, audio_sample_rate, 0.99)
 
-	plt.figure()
-	plt.subplot(221)
-	plt.plot(complex_baseband_samples.real, complex_baseband_samples.imag, '.')
+	fig, ax = plt.subplots(2,3)
+	fig.tight_layout()
+	plt.subplot(231)
+	plt.plot(baseband_samples.real, baseband_samples.imag, '.', ms=2)
 	plt.title('Baseband Samples')
-	plt.subplot(222)
-	plt.plot(baseband_psd[0], baseband_psd[1])
+	plt.xlabel('in-phase')
+	plt.ylabel('quadrature')
+	plt.xlim(-0.5,0.5)
+	plt.ylim(-0.5,0.5)
+	plt.grid(True)
+	plt.subplot(232)
+	plt.plot(baseband_psd[0], baseband_psd[1], '.', ms=2)
 	plt.xlim(-baseband_sample_rate, baseband_sample_rate)
-	plt.ylim(-100,10)
+	plt.ylim(-60,10)
 	plt.ylabel("dBFS")
 	plt.xlabel("Frequency, Hz")
 	plt.title("Baseband Spectrum")
 	plt.grid(True)
-	plt.subplot(223)
-	plt.plot(audio_samples, '.')
+	plt.subplot(233)
+	plt.plot(expanded_baseband_psd[0], expanded_baseband_psd[1], '.', ms=2)
+	plt.xlim(-3000, 3000)
+	plt.ylim(-100,10)
+	plt.ylabel("dBFS")
+	plt.xlabel("Frequency, Hz")
+	plt.title("Interpolated Baseband Spectrum")
+	plt.grid(True)
+	plt.subplot(234)
+	plt.plot(audio_samples, linewidth=1)
 	plt.title("Audio Samples")
-	plt.subplot(224)
-	plt.plot(audio_psd[0], audio_psd[1])
+	plt.ylim(-0.5,0.5)
+	plt.subplot(235)
+	plt.plot(audio_psd[0], audio_psd[1], '.', ms=2)
 	plt.xlim(0, 3000)
 	plt.ylim(-100,10)
 	plt.ylabel("dBFS")
 	plt.xlabel("Frequency, Hz")
-	plt.title("Upsampled, translated spectrum")
+	plt.title("Audio spectrum")
 	plt.grid(True)
 	plt.show()
 
