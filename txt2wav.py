@@ -90,20 +90,21 @@ def main():
 	complex_samples = np.tile(complex_samples, repeat_count)
 
 	# Apply interpolation filter
-	interp_fir = firwin(127, [baseband_sample_rate / 2], pass_zero='lowpass', fs=audio_sample_rate)
+	interp_fir = firwin(1023, [65 * baseband_sample_rate / 128], pass_zero='lowpass', fs=audio_sample_rate)
 	complex_samples = np.convolve(complex_samples, interp_fir)
 	complex_sample_count *= repeat_count
 
 	audio_samples = np.zeros(complex_sample_count, dtype=complex)
 	# Mix complex samples with sine wave at carrier freq to translate spectrum
 	for i in range(complex_sample_count):
-		audio_samples[i] = complex_samples[i] * np.exp(2j * np.pi * i * carrier_freq / audio_sample_rate)
+		time_var = 2 * np.pi * i * carrier_freq / audio_sample_rate
+		audio_samples[i] = complex_samples[i] * np.exp(time_var * 1j)
 
 	# Discard complex samples
 	audio_samples = audio_samples.real
 
-	# Normalize audio samples
-	audio_samples = audio_samples / np.max(np.abs(audio_samples))
+	# Scale audio samples
+	audio_samples = audio_samples * interpolation_rate
 
 	# Perform FFT of final audio signal
 	audio_psd = AnalyzeSpectrum(audio_samples, audio_sample_rate, 0.99)
@@ -111,7 +112,7 @@ def main():
 
 	plt.figure()
 	plt.subplot(221)
-	plt.plot(baseband_samples, '.')
+	plt.plot(complex_baseband_samples.real, complex_baseband_samples.imag, '.')
 	plt.title('Baseband Samples')
 	plt.subplot(222)
 	plt.plot(baseband_psd[0], baseband_psd[1])

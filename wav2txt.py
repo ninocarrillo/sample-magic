@@ -74,17 +74,21 @@ def main():
 
 	audio_sample_count = len(audio_samples)
 
-	# Mix audio with negative complex carrier freq to move spectrum to baseband
-	baseband_samples = np.zeros(len(audio_samples), dtype=complex)
+	# Mix audio with complex carrier freq to move spectrum to baseband
+	baseband_samples = np.zeros(audio_sample_count, dtype=complex)
 	for i in range(audio_sample_count):
-		baseband_samples[i] = audio_samples[i] * np.exp(2j * np.pi * i * (-carrier_freq) / audio_sample_rate)
+		time_var = 2 * np.pi * i * carrier_freq / audio_sample_rate
+		baseband_samples[i] = audio_samples[i] * np.exp(time_var * 1j)
+
+	baseband_sample_rate = audio_sample_rate
+
+	# Low-pass filter the complex baseband
+	deci_fir = firwin(1023, [carrier_freq], pass_zero='lowpass', fs=audio_sample_rate)
+	baseband_samples = np.convolve(baseband_samples, deci_fir)
 
 	# Decimate baseband samples:
 	baseband_samples = baseband_samples[::decimation_rate]
-	baseband_sample_rate = audio_sample_rate / decimation_rate
-
-	# Normalize baseband samples
-	baseband_samples = baseband_samples / np.max(np.abs(baseband_samples))
+	baseband_sample_rate = baseband_sample_rate / decimation_rate
 
 	# Perform FFT of final audio signal
 	audio_psd = AnalyzeSpectrum(audio_samples, audio_sample_rate, 0.99)
@@ -92,8 +96,7 @@ def main():
 
 	plt.figure()
 	plt.subplot(223)
-	plt.plot(baseband_samples.real, '.')
-	plt.plot(baseband_samples.imag, '.')
+	plt.plot(baseband_samples.real, baseband_samples.imag, '.')
 	plt.title('Baseband Samples')
 	plt.subplot(224)
 	plt.plot(baseband_psd[0], baseband_psd[1])
