@@ -90,7 +90,7 @@ def main():
 
 	# Low-pass filter the complex baseband
 	deci_fir_len = (decimation_rate * 341) + 1
-	deci_fir = firwin(deci_fir_len, [carrier_freq], pass_zero='lowpass', fs=audio_sample_rate)
+	deci_fir = firwin(deci_fir_len, [1500], pass_zero='lowpass', fs=audio_sample_rate)
 	baseband_samples = np.convolve(baseband_samples, deci_fir, mode='full')
 	
 	# Discard delayed samples
