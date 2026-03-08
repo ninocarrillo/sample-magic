@@ -92,8 +92,12 @@ def main():
 	expanded_baseband_samples = np.tile(expanded_baseband_samples, repeat_count)
 
 	# Apply interpolation filter
-	interp_fir = firwin(2047, [baseband_sample_rate / 2], pass_zero='lowpass', fs=audio_sample_rate)
-	expanded_baseband_samples = np.convolve(expanded_baseband_samples, interp_fir)
+	interp_fir_len = (interpolation_rate*341)+1
+	interp_fir = firwin(interp_fir_len, [baseband_sample_rate / 2], pass_zero='lowpass', fs=audio_sample_rate)
+	expanded_baseband_samples = np.convolve(expanded_baseband_samples, interp_fir, mode='full')
+	
+	# Discard delayed samples
+	expanded_baseband_samples = expanded_baseband_samples[int((interp_fir_len - 1) / 2):]
 	expanded_baseband_sample_count = len(expanded_baseband_samples)
 
 	audio_samples = np.zeros(expanded_baseband_sample_count, dtype=complex)
@@ -106,7 +110,7 @@ def main():
 	audio_samples = audio_samples.real
 
 	# Scale audio samples
-	audio_samples = audio_samples * interpolation_rate
+	audio_samples = 2 * audio_samples * interpolation_rate
 
 	# Perform FFT analysis of modulation stages
 	baseband_psd = AnalyzeSpectrum(baseband_samples, baseband_sample_rate, 0.99)

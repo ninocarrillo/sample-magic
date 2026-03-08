@@ -59,12 +59,13 @@ def main():
 		print("Python version should be 3.x, exiting")
 		sys.exit(1)
 	# check correct number of parameters were passed to command line
-	if len(sys.argv) != 5:
-		print("Incorrect arg count. Usage: python3 wav2txt.py <input wav file> <decimation rate> <carrier freq> <output txt file>")
+	if len(sys.argv) != 6:
+		print("Incorrect arg count. Usage: python3 wav2txt.py <input wav file> <decimation rate> <sample offset> <carrier freq> <output txt file>")
 		sys.exit(2)
 
 	decimation_rate = int(sys.argv[2])
-	carrier_freq = float(sys.argv[3])
+	sample_offset = int(sys.argv[3])
+	carrier_freq = float(sys.argv[4])
 
 	try:
 		audio_sample_rate, audio_samples  = readwav(sys.argv[1])
@@ -82,14 +83,19 @@ def main():
 	# Mix audio with complex carrier freq to move spectrum to baseband
 	baseband_samples = np.zeros(audio_sample_count, dtype=complex)
 	for i in range(audio_sample_count):
-		time_var = 2 * np.pi * i * carrier_freq / audio_sample_rate
+		time_var = 2 * np.pi * i * (-carrier_freq) / audio_sample_rate
 		baseband_samples[i] = audio_samples[i] * np.exp(time_var * 1j)
 
 	baseband_sample_rate = audio_sample_rate
 
 	# Low-pass filter the complex baseband
-	deci_fir = firwin(1023, [carrier_freq], pass_zero='lowpass', fs=audio_sample_rate)
-	baseband_samples = np.convolve(baseband_samples, deci_fir)
+	deci_fir_len = (decimation_rate * 341) + 1
+	deci_fir = firwin(deci_fir_len, [carrier_freq], pass_zero='lowpass', fs=audio_sample_rate)
+	baseband_samples = np.convolve(baseband_samples, deci_fir, mode='full')
+	
+	# Discard delayed samples
+	baseband_samples = baseband_samples[int(((deci_fir_len - 1) / 2) - sample_offset):]
+	
 
 	# Decimate baseband samples:
 	baseband_samples = baseband_samples[::decimation_rate]
@@ -99,9 +105,9 @@ def main():
 	audio_psd = AnalyzeSpectrum(audio_samples, audio_sample_rate, 0.99)
 	baseband_psd = AnalyzeSpectrum(baseband_samples, baseband_sample_rate, 0.99)
 
-	fig, ax = plt.subplots(2,2)
+	fig, ax = plt.subplots(2,3)
 	fig.tight_layout()
-	plt.subplot(223)
+	plt.subplot(235)
 	plt.plot(baseband_samples.real, baseband_samples.imag, '.', ms=2)
 	plt.title('Baseband Samples')
 	plt.xlabel('in-phase')
@@ -109,7 +115,7 @@ def main():
 	plt.xlim(-0.5,0.5)
 	plt.ylim(-0.5,0.5)
 	plt.grid(True)
-	plt.subplot(224)
+	plt.subplot(234)
 	plt.plot(baseband_psd[0], baseband_psd[1], '.', ms=2)
 	plt.xlim(-baseband_sample_rate, baseband_sample_rate)
 	plt.ylim(-60,10)
@@ -117,11 +123,11 @@ def main():
 	plt.xlabel("Frequency, Hz")
 	plt.title("Baseband Spectrum")
 	plt.grid(True)
-	plt.subplot(221)
+	plt.subplot(231)
 	plt.plot(audio_samples, linewidth=1)
 	plt.title("Audio Samples")
 	plt.ylim(-0.5,0.5)
-	plt.subplot(222)
+	plt.subplot(232)
 	plt.plot(audio_psd[0], audio_psd[1], '.', ms=2)
 	plt.xlim(0, 3000)
 	plt.ylim(-100,10)
@@ -132,11 +138,11 @@ def main():
 	plt.show()
 
 	try:
-		with open(sys.argv[4], 'w', encoding='utf-8') as output_file:
+		with open(sys.argv[5], 'w', encoding='utf-8') as output_file:
 			for complex_sample_pair in baseband_samples:
 				print(f'{complex_sample_pair.real:.6f} {complex_sample_pair.imag:.6f}', file=output_file)
 	except:
-		printf(f'Unable to create output file {sys.argv[4]}')
+		printf(f'Unable to create output file {sys.argv[5]}')
 
 			
 
