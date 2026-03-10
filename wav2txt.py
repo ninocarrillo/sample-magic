@@ -59,13 +59,14 @@ def main():
 		print("Python version should be 3.x, exiting")
 		sys.exit(1)
 	# check correct number of parameters were passed to command line
-	if len(sys.argv) != 6:
-		print("Incorrect arg count. Usage: python3 wav2txt.py <input wav file> <decimation rate> <sample offset> <carrier freq> <output txt file>")
+	if len(sys.argv) != 7:
+		print("Incorrect arg count. Usage: python3 wav2txt.py <input wav file> <decimation rate> <deci fir len> <sample offset> <carrier freq> <output txt file>")
 		sys.exit(2)
 
 	decimation_rate = int(sys.argv[2])
-	sample_offset = int(sys.argv[3])
-	carrier_freq = float(sys.argv[4])
+	deci_fir_len = int(sys.argv[3])
+	sample_offset = int(sys.argv[4])
+	carrier_freq = float(sys.argv[5])
 
 	try:
 		audio_sample_rate, audio_samples  = readwav(sys.argv[1])
@@ -89,17 +90,25 @@ def main():
 	baseband_sample_rate = audio_sample_rate
 
 	# Low-pass filter the complex baseband
-	deci_fir_len = (decimation_rate * 341) + 1
 	deci_fir = firwin(deci_fir_len, [1500], pass_zero='lowpass', fs=audio_sample_rate)
 	baseband_samples = np.convolve(baseband_samples, deci_fir, mode='full')
 	
 	# Discard delayed samples
 	baseband_samples = baseband_samples[int(((deci_fir_len - 1) / 2) - sample_offset):]
+	pre_deci_baseband_sample_count = len(baseband_samples)
 	
+	pre_deci_baseband_samples = baseband_samples.copy()
+	pre_deci_index = list(range(pre_deci_baseband_sample_count))
+	plt.figure()
+	plt.plot(pre_deci_index, pre_deci_baseband_samples.real, marker='o')
 
 	# Decimate baseband samples:
 	baseband_samples = baseband_samples[::decimation_rate]
 	baseband_sample_rate = baseband_sample_rate / decimation_rate
+
+	baseband_index = list(range(0,pre_deci_baseband_sample_count, decimation_rate))
+	plt.plot(baseband_index, baseband_samples.real, marker='x')
+	plt.show()
 
 	# Perform FFT of final audio signal
 	audio_psd = AnalyzeSpectrum(audio_samples, audio_sample_rate, 0.99)
@@ -138,11 +147,11 @@ def main():
 	plt.show()
 
 	try:
-		with open(sys.argv[5], 'w', encoding='utf-8') as output_file:
+		with open(sys.argv[6], 'w', encoding='utf-8') as output_file:
 			for complex_sample_pair in baseband_samples:
 				print(f'{complex_sample_pair.real:.6f} {complex_sample_pair.imag:.6f}', file=output_file)
 	except:
-		printf(f'Unable to create output file {sys.argv[5]}')
+		printf(f'Unable to create output file {sys.argv[6]}')
 
 			
 

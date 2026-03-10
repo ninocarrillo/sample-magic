@@ -58,15 +58,16 @@ def main():
 		print("Python version should be 3.x, exiting")
 		sys.exit(1)
 	# check correct number of parameters were passed to command line
-	if len(sys.argv) != 7:
-		print("Incorrect arg count. Usage: python3 txt2wav.py <input txt file> <input sample rate> <interpolation rate> <carrier freq> <repeat count> <output wav file>")
+	if len(sys.argv) != 8:
+		print("Incorrect arg count. Usage: python3 txt2wav.py <input txt file> <input sample rate> <interpolation rate> <interp fir len> <carrier freq> <repeat count> <output wav file>")
 		sys.exit(2)
 
 	baseband_sample_rate = float(sys.argv[2])
 	interpolation_rate = int(sys.argv[3])
-	carrier_freq = float(sys.argv[4])
-	repeat_count = int(sys.argv[5])
-	wav_file_name = sys.argv[6]
+	interp_fir_len = int(sys.argv[4])
+	carrier_freq = float(sys.argv[5])
+	repeat_count = int(sys.argv[6])
+	wav_file_name = sys.argv[7]
 	audio_sample_rate = baseband_sample_rate * interpolation_rate
 
 	# Open the input text file and read data into a list of complex float values
@@ -92,7 +93,6 @@ def main():
 	expanded_baseband_samples = np.tile(expanded_baseband_samples, repeat_count)
 
 	# Apply interpolation filter
-	interp_fir_len = (interpolation_rate*341)+1
 	interp_fir = firwin(interp_fir_len, [baseband_sample_rate / 2], pass_zero='lowpass', fs=audio_sample_rate)
 	expanded_baseband_samples = np.convolve(expanded_baseband_samples, interp_fir, mode='full')
 	
