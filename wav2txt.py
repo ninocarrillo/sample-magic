@@ -99,16 +99,16 @@ def main():
 	
 	pre_deci_baseband_samples = baseband_samples.copy()
 	pre_deci_index = list(range(pre_deci_baseband_sample_count))
-	plt.figure()
-	plt.plot(pre_deci_index, pre_deci_baseband_samples.real, marker='o')
+	# plt.figure()
+	# plt.plot(pre_deci_index, pre_deci_baseband_samples.real, marker='o')
 
 	# Decimate baseband samples:
 	baseband_samples = baseband_samples[::decimation_rate]
 	baseband_sample_rate = baseband_sample_rate / decimation_rate
 
 	baseband_index = list(range(0,pre_deci_baseband_sample_count, decimation_rate))
-	plt.plot(baseband_index, baseband_samples.real, marker='x')
-	plt.show()
+	# plt.plot(baseband_index, baseband_samples.real, marker='x')
+	# plt.show()
 
 	# Perform FFT of final audio signal
 	audio_psd = AnalyzeSpectrum(audio_samples, audio_sample_rate, 0.99)
@@ -153,7 +153,49 @@ def main():
 	except:
 		printf(f'Unable to create output file {sys.argv[6]}')
 
-			
+	# Attempt Schmidl-Cox conjugate correlation
+	FFT_N = 64
+	Oversample = int(6 / decimation_rate)
+	L = int(Oversample * FFT_N / 2)
+	
+	# Create empty list to place metric P values
+	d_range = len(baseband_samples) - (FFT_N * Oversample)
+	P1 = np.zeros(d_range, dtype='complex')
+	for d in range(d_range):
+		P1[d] = 0 + 0j
+		for m in range(L):
+			P1[d] += baseband_samples[d + m].conj()*baseband_samples[d + m + L]
+
+	# Create moving average filter with length equal to cyclic prefix sample count
+	CP_N = 8
+	MA_FIR = np.ones(CP_N * Oversample)
+	P1_MA = np.convolve(P1, MA_FIR, mode='full') / (CP_N * Oversample)
+
+	# Calculate the receive energy, R
+	R = np.zeros(d_range)
+	for d in range(d_range):
+		R[d] = 0
+		for m in range(L):
+			R[d] += np.power(np.abs(baseband_samples[d + m + L]), 2) / Oversample
+
+	# Normalize P1 
+	P1_Norm = np.zeros(d_range)
+	for d in range(d_range):
+		x = np.power(R[d],2)
+		if R[d] > 0.1:
+			P1_Norm[d] = np.power(np.abs(P1_MA[d]), 2) / x
+
+
+	plt.figure()
+	plt.plot(P1.real)
+	plt.plot(P1_MA.real)
+	plt.plot(R)
+	plt.plot(P1_Norm)
+	plt.legend(['P','P Moving Avg','R Energy','M Final Metric'])
+	plt.show()
+
+
+	
 
 if __name__ == "__main__":
 	main()
