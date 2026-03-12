@@ -204,10 +204,10 @@ def main():
 	fudge = -int(np.ceil(Oversample / 2))
 	try:
 		CP_Length = 8 * Oversample
-		SC_Peak_Sample = 915 + fudge
-		#SC_Peak_Sample = 305 + fudge
-		#SC_Peak_Sample = 153 + fudge
-		SC_Offset = (2 * L) + CP_Length
+		SC_Peak_Sample = 915
+		#SC_Peak_Sample = 305
+		#SC_Peak_Sample = 153
+		SC_Offset = (2 * L) + CP_Length + fudge
 		Start_i = SC_Peak_Sample + SC_Offset
 		Symbol_Baseband = baseband_samples[Start_i:Start_i + (Oversample * FFT_N):Oversample]
 		Symbol_Output = np.fft.fft(Symbol_Baseband, FFT_N)
@@ -222,8 +222,8 @@ def main():
 		plt.scatter(Symbol_Output[58:64].real, Symbol_Output[58:64].imag)
 		#plt.scatter(Symbol_Output[pilot_index_4].real, Symbol_Output[pilot_index_4].imag)
 		#plt.scatter(Symbol_Output.real, Symbol_Output.imag)
-		plt.xlim(-2,2)
-		plt.ylim(-2,2)
+		plt.xlim(-1.5,1.5)
+		plt.ylim(-1.5,1.5)
 		plt.grid('true')
 		plt.show()
 	except:
