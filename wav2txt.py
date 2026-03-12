@@ -162,9 +162,15 @@ def main():
 	d_range = len(baseband_samples) - (FFT_N * Oversample)
 	P1 = np.zeros(d_range, dtype='complex')
 	for d in range(d_range):
-		P1[d] = 0 + 0j
+		P1[d] = 0
 		for m in range(L):
 			P1[d] += baseband_samples[d + m].conj()*baseband_samples[d + m + L]
+	
+	# Normalize the P1 metric based on oversample rate
+	P1 = P1 / Oversample
+			
+	# Discard imaginary part of P1
+	P1 = P1.real
 
 	# Create moving average filter with length equal to cyclic prefix sample count
 	CP_N = 8
@@ -187,8 +193,35 @@ def main():
 			
 	P1_Derivative = np.zeros(d_range - 1)
 	for d in range(d_range-1):
-		P1_Derivative[d] = P1[d] - P1[d+1]
+		P1_Derivative[d] = P1_MA[d+1] - P1_MA[d]
+	
+	Sync_List = []
+	Sync_Arm = 0
+	Sync_Arm_Timer = 0
+	Sync_Inhibit_Period = (2 * L) + (CP_N * Oversample)
+	Sync_Inhibit_Timer = Sync_Inhibit_Period
+	for d in range(1,d_range-1):
+		Sync_Inhibit_Timer += 1
+		if Sync_Inhibit_Timer > Sync_Inhibit_Period:
+			if P1_Norm[d] > 0.5:
+				Sync_Arm = 1
+			if Sync_Arm > 0:
+				if (P1_Derivative[d] < 0) & (P1_Derivative[d-1] > 0):
+					Sync_List.append(d)
+					Sync_Arm = 0
+					Sync_Inhibit_Timer = 0
+			Sync_Arm_Timer += 1
+			if Sync_Arm_Timer >= 2 * L:
+				Sync_Arm_Timer = 0
+				Sync_Arm = 0
+			
+	print(Sync_List)
 
+	plt.figure()
+	plt.title('Derivative of Moving Average of P1')
+	plt.plot(P1_Derivative)
+	plt.grid('true')
+	plt.show()
 
 	plt.figure()
 	plt.plot(np.abs(baseband_samples))
@@ -206,58 +239,88 @@ def main():
 	pilot_index_2 = 21
 	pilot_index_3 = 43
 	pilot_index_4 = 57
-	fudge = -int(np.ceil(Oversample / 2))
 
 	CP_Length = 8 * Oversample
-	SC_Peak_Sample = 915
-	#SC_Peak_Sample = 305
-	#SC_Peak_Sample = 153
-	SC_Offset = (2 * L) + CP_Length + fudge
-	Start_i = SC_Peak_Sample + SC_Offset
-	Symbol_Baseband = baseband_samples[Start_i:Start_i + (Oversample * FFT_N):Oversample]
-	Symbol_Output = np.fft.fft(Symbol_Baseband, FFT_N)
-	fig,ax = plt.subplots(2,3)
-	plt.suptitle(f'Start Index {Start_i}, Oversample {Oversample}, Fudge {fudge}')
-	fig.tight_layout()
-	plt.subplot(231)
-	plt.xlim(-1.5,1.5)
-	plt.ylim(-1.5,1.5)
-	plt.grid('true')
-	plt.title(f'Pilot at {pilot_index_1}\nPhase {(180/np.pi)*np.angle(Symbol_Output[pilot_index_1]):.1f}, Mag {np.abs(Symbol_Output[pilot_index_1]):.2f}')
-	plt.scatter(Symbol_Output[pilot_index_1].real, Symbol_Output[pilot_index_1].imag)
-	plt.plot([0,Symbol_Output[pilot_index_1].real],[0,Symbol_Output[pilot_index_1].imag])
-	plt.subplot(232)
-	plt.xlim(-1.5,1.5)
-	plt.ylim(-1.5,1.5)
-	plt.grid('true')
-	plt.title(f'Pilot at {pilot_index_2}\nPhase {(180/np.pi)*np.angle(Symbol_Output[pilot_index_2]):.1f}, Mag {np.abs(Symbol_Output[pilot_index_2]):.2f}')
-	plt.scatter(Symbol_Output[pilot_index_2].real, Symbol_Output[pilot_index_2].imag)
-	plt.plot([0,Symbol_Output[pilot_index_2].real],[0,Symbol_Output[pilot_index_2].imag])
-	plt.subplot(234)
-	plt.xlim(-1.5,1.5)
-	plt.ylim(-1.5,1.5)
-	plt.grid('true')
-	plt.title(f'Pilot at {pilot_index_3}\nPhase {(180/np.pi)*np.angle(Symbol_Output[pilot_index_3]):.1f}, Mag {np.abs(Symbol_Output[pilot_index_3]):.2f}')
-	plt.scatter(Symbol_Output[pilot_index_3].real, Symbol_Output[pilot_index_3].imag)
-	plt.plot([0,Symbol_Output[pilot_index_3].real],[0,Symbol_Output[pilot_index_3].imag])
-	plt.subplot(235)
-	plt.xlim(-1.5,1.5)
-	plt.ylim(-1.5,1.5)
-	plt.grid('true')
-	plt.title(f'Pilot at {pilot_index_4}\nPhase {(180/np.pi)*np.angle(Symbol_Output[pilot_index_4]):.1f}, Mag {np.abs(Symbol_Output[pilot_index_4]):.2f}')
-	plt.scatter(Symbol_Output[pilot_index_4].real, Symbol_Output[pilot_index_4].imag)
-	plt.plot([0,Symbol_Output[pilot_index_4].real],[0,Symbol_Output[pilot_index_4].imag])
-	plt.subplot(233)
-	plt.xlim(-1.5,1.5)
-	plt.ylim(-1.5,1.5)
-	plt.grid('true')
-	plt.title(f'Data Subcarriers')
-	plt.scatter(Symbol_Output[0:pilot_index_1].real, Symbol_Output[0:pilot_index_1].imag)
-	plt.scatter(Symbol_Output[pilot_index_1+1:pilot_index_2].real, Symbol_Output[pilot_index_1+1:pilot_index_2].imag)
-	plt.scatter(Symbol_Output[pilot_index_2+1:pilot_index_3].real, Symbol_Output[pilot_index_2+1:pilot_index_3].imag)
-	plt.scatter(Symbol_Output[pilot_index_3+1:pilot_index_4].real, Symbol_Output[pilot_index_3+1:pilot_index_4].imag)
-	plt.scatter(Symbol_Output[pilot_index_4+1:].real, Symbol_Output[pilot_index_4+1:].imag)
-	plt.show()
+	#fudge =(Oversample * 2)-int(np.ceil(Oversample / 2))
+	fudge = 0
+	if Oversample > 1:
+		fudge += int(Oversample * 3 // 2)
+	for SC_Peak_Sample in Sync_List:
+		# Working fudge values by oversample:
+		# Oversample 6: 9 samples
+		# Oversample 3: 4 samples
+		# Oversample 2: 3 samples
+		# Oversample 1: 0 samples
+		SC_Offset = (2 * L) + CP_Length + fudge
+		Start_i = SC_Peak_Sample + SC_Offset
+		Symbol_Baseband = baseband_samples[Start_i:Start_i + (Oversample * FFT_N):Oversample]
+		Symbol2_Baseband = baseband_samples[Start_i+(Oversample * FFT_N):(Oversample*FFT_N)+Start_i + (Oversample * FFT_N):Oversample]
+		Symbol3_Baseband = baseband_samples[Start_i+(2*Oversample * FFT_N):(2*Oversample*FFT_N)+Start_i + (Oversample * FFT_N):Oversample]
+		Symbol_Output = np.fft.fft(Symbol_Baseband, FFT_N)
+		Symbol2_Output = np.fft.fft(Symbol2_Baseband, FFT_N)
+		Symbol3_Output = np.fft.fft(Symbol3_Baseband, FFT_N)
+		fig,ax = plt.subplots(2,4)
+		plt.suptitle(f'Start Index {Start_i}, Oversample {Oversample}, Fudge {fudge}')
+		fig.tight_layout()
+		plt.subplot(241)
+		plt.xlim(-1.5,1.5)
+		plt.ylim(-1.5,1.5)
+		plt.grid('true')
+		plt.title(f'Pilot at {pilot_index_1}\nPhase {(180/np.pi)*np.angle(Symbol_Output[pilot_index_1]):.1f}, Mag {np.abs(Symbol_Output[pilot_index_1]):.2f}')
+		plt.scatter(Symbol_Output[pilot_index_1].real, Symbol_Output[pilot_index_1].imag)
+		plt.plot([0,Symbol_Output[pilot_index_1].real],[0,Symbol_Output[pilot_index_1].imag])
+		plt.subplot(242)
+		plt.xlim(-1.5,1.5)
+		plt.ylim(-1.5,1.5)
+		plt.grid('true')
+		plt.title(f'Pilot at {pilot_index_2}\nPhase {(180/np.pi)*np.angle(Symbol_Output[pilot_index_2]):.1f}, Mag {np.abs(Symbol_Output[pilot_index_2]):.2f}')
+		plt.scatter(Symbol_Output[pilot_index_2].real, Symbol_Output[pilot_index_2].imag)
+		plt.plot([0,Symbol_Output[pilot_index_2].real],[0,Symbol_Output[pilot_index_2].imag])
+		plt.subplot(243)
+		plt.xlim(-1.5,1.5)
+		plt.ylim(-1.5,1.5)
+		plt.grid('true')
+		plt.title(f'Pilot at {pilot_index_3}\nPhase {(180/np.pi)*np.angle(Symbol_Output[pilot_index_3]):.1f}, Mag {np.abs(Symbol_Output[pilot_index_3]):.2f}')
+		plt.scatter(Symbol_Output[pilot_index_3].real, Symbol_Output[pilot_index_3].imag)
+		plt.plot([0,Symbol_Output[pilot_index_3].real],[0,Symbol_Output[pilot_index_3].imag])
+		plt.subplot(244)
+		plt.xlim(-1.5,1.5)
+		plt.ylim(-1.5,1.5)
+		plt.grid('true')
+		plt.title(f'Pilot at {pilot_index_4}\nPhase {(180/np.pi)*np.angle(Symbol_Output[pilot_index_4]):.1f}, Mag {np.abs(Symbol_Output[pilot_index_4]):.2f}')
+		plt.scatter(Symbol_Output[pilot_index_4].real, Symbol_Output[pilot_index_4].imag)
+		plt.plot([0,Symbol_Output[pilot_index_4].real],[0,Symbol_Output[pilot_index_4].imag])
+		plt.subplot(245)
+		plt.xlim(-1.5,1.5)
+		plt.ylim(-1.5,1.5)
+		plt.grid('true')
+		plt.title(f'Symbol 1\nData Subcarriers')
+		plt.scatter(Symbol_Output[0:pilot_index_1].real, Symbol_Output[0:pilot_index_1].imag)
+		plt.scatter(Symbol_Output[pilot_index_1+1:pilot_index_2].real, Symbol_Output[pilot_index_1+1:pilot_index_2].imag)
+		plt.scatter(Symbol_Output[pilot_index_2+1:pilot_index_3].real, Symbol_Output[pilot_index_2+1:pilot_index_3].imag)
+		plt.scatter(Symbol_Output[pilot_index_3+1:pilot_index_4].real, Symbol_Output[pilot_index_3+1:pilot_index_4].imag)
+		plt.scatter(Symbol_Output[pilot_index_4+1:].real, Symbol_Output[pilot_index_4+1:].imag)
+		plt.subplot(246)
+		plt.xlim(-1.5,1.5)
+		plt.ylim(-1.5,1.5)
+		plt.grid('true')
+		plt.title(f'Symbol 2\nData Subcarriers')
+		plt.scatter(Symbol2_Output[0:pilot_index_1].real, Symbol2_Output[0:pilot_index_1].imag)
+		plt.scatter(Symbol2_Output[pilot_index_1+1:pilot_index_2].real, Symbol2_Output[pilot_index_1+1:pilot_index_2].imag)
+		plt.scatter(Symbol2_Output[pilot_index_2+1:pilot_index_3].real, Symbol2_Output[pilot_index_2+1:pilot_index_3].imag)
+		plt.scatter(Symbol2_Output[pilot_index_3+1:pilot_index_4].real, Symbol2_Output[pilot_index_3+1:pilot_index_4].imag)
+		plt.scatter(Symbol2_Output[pilot_index_4+1:].real, Symbol_Output[pilot_index_4+1:].imag)
+		plt.subplot(247)
+		plt.xlim(-1.5,1.5)
+		plt.ylim(-1.5,1.5)
+		plt.grid('true')
+		plt.title(f'Symbol 3\nData Subcarriers')
+		plt.scatter(Symbol3_Output[0:pilot_index_1].real, Symbol3_Output[0:pilot_index_1].imag)
+		plt.scatter(Symbol3_Output[pilot_index_1+1:pilot_index_2].real, Symbol3_Output[pilot_index_1+1:pilot_index_2].imag)
+		plt.scatter(Symbol3_Output[pilot_index_2+1:pilot_index_3].real, Symbol3_Output[pilot_index_2+1:pilot_index_3].imag)
+		plt.scatter(Symbol3_Output[pilot_index_3+1:pilot_index_4].real, Symbol3_Output[pilot_index_3+1:pilot_index_4].imag)
+		plt.scatter(Symbol3_Output[pilot_index_4+1:].real, Symbol_Output[pilot_index_4+1:].imag)
+		plt.show()
 
 if __name__ == "__main__":
 	main()
