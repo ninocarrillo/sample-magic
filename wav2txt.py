@@ -184,6 +184,10 @@ def main():
 		x = np.power(R[d],2)
 		if R[d] > 0.1:
 			P1_Norm[d] = np.power(np.abs(P1_MA[d]), 2) / x
+			
+	P1_Derivative = np.zeros(d_range - 1)
+	for d in range(d_range-1):
+		P1_Derivative[d] = P1[d] - P1[d+1]
 
 
 	plt.figure()
@@ -192,7 +196,8 @@ def main():
 	plt.plot(P1_MA.real)
 	plt.plot(R)
 	plt.plot(P1_Norm)
-	plt.legend(['Baseband','P','P Moving Avg','R Energy','M Final Metric'])
+	plt.plot(P1_Derivative)
+	plt.legend(['Baseband','P','P Moving Avg','R Energy','M Final Metric', 'Derivative'])
 	plt.show()
 
 
