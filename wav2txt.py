@@ -187,13 +187,27 @@ def main():
 
 
 	plt.figure()
+	plt.plot(np.abs(baseband_samples))
 	plt.plot(P1.real)
 	plt.plot(P1_MA.real)
 	plt.plot(R)
 	plt.plot(P1_Norm)
-	plt.legend(['P','P Moving Avg','R Energy','M Final Metric'])
+	plt.legend(['Baseband','P','P Moving Avg','R Energy','M Final Metric'])
 	plt.show()
 
+
+	# Decimate from selected sample
+	SC_Peak_Sample = 915
+	SC_Offset = 2 * L 
+	Symbol_Baseband = baseband_samples[SC_Peak_Sample + SC_Offset:SC_Peak_Sample + SC_Offset + (Oversample * FFT_N):Oversample]
+	plt.figure()
+	plt.plot(Symbol_Baseband)
+	plt.show()
+
+	Symbol_Output = np.fft.fft(Symbol_Baseband, FFT_N)
+	plt.figure()
+	plt.scatter(Symbol_Output.real, Symbol_Output.imag)
+	plt.show()
 
 	
 
