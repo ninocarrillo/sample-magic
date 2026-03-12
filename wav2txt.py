@@ -197,19 +197,37 @@ def main():
 
 
 	# Decimate from selected sample
-	SC_Peak_Sample = 915
-	SC_Offset = 2 * L 
-	Symbol_Baseband = baseband_samples[SC_Peak_Sample + SC_Offset:SC_Peak_Sample + SC_Offset + (Oversample * FFT_N):Oversample]
-	plt.figure()
-	plt.plot(Symbol_Baseband)
-	plt.show()
-
-	Symbol_Output = np.fft.fft(Symbol_Baseband, FFT_N)
-	plt.figure()
-	plt.scatter(Symbol_Output.real, Symbol_Output.imag)
-	plt.show()
-
-	
+	pilot_index_1 = 7
+	pilot_index_2 = 21
+	pilot_index_3 = 43
+	pilot_index_4 = 57
+	fudge = -int(np.ceil(Oversample / 2))
+	try:
+		CP_Length = 8 * Oversample
+		SC_Peak_Sample = 915 + fudge
+		#SC_Peak_Sample = 305 + fudge
+		#SC_Peak_Sample = 153 + fudge
+		SC_Offset = (2 * L) + CP_Length
+		Start_i = SC_Peak_Sample + SC_Offset
+		Symbol_Baseband = baseband_samples[Start_i:Start_i + (Oversample * FFT_N):Oversample]
+		Symbol_Output = np.fft.fft(Symbol_Baseband, FFT_N)
+		plt.figure()
+		plt.title(f'Start Index {Start_i}, Oversample {Oversample}, Fudge {fudge}')
+		plt.scatter(Symbol_Output[0:7].real, Symbol_Output[0:7].imag)
+		#plt.scatter(Symbol_Output[pilot_index_1].real, Symbol_Output[pilot_index_1].imag)
+		plt.scatter(Symbol_Output[22:43].real, Symbol_Output[22:43].imag)
+		#plt.scatter(Symbol_Output[pilot_index_2].real, Symbol_Output[pilot_index_2].imag)
+		plt.scatter(Symbol_Output[44:57].real, Symbol_Output[44:57].imag)
+		#plt.scatter(Symbol_Output[pilot_index_3].real, Symbol_Output[pilot_index_3].imag)
+		plt.scatter(Symbol_Output[58:64].real, Symbol_Output[58:64].imag)
+		#plt.scatter(Symbol_Output[pilot_index_4].real, Symbol_Output[pilot_index_4].imag)
+		#plt.scatter(Symbol_Output.real, Symbol_Output.imag)
+		plt.xlim(-2,2)
+		plt.ylim(-2,2)
+		plt.grid('true')
+		plt.show()
+	except:
+		pass
 
 if __name__ == "__main__":
 	main()
