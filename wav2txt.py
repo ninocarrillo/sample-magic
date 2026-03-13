@@ -242,10 +242,7 @@ def main():
 	p3 = 57 # 180 Phase
 
 	CP_Length = 8 * Oversample
-	fudge =(Oversample * 2)-int(np.ceil(Oversample / 2))
-	#fudge = 0
-	if Oversample > 1:
-		fudge = int(Oversample * 3 // 2)
+	fudge = int(Oversample * 1.5)
 	for SC_Peak_Sample in Sync_List:
 		# Working fudge values by oversample:
 		# Oversample 6: 9 samples
@@ -268,6 +265,18 @@ def main():
 			p3_err += 360
 		while p3_err > 180:
 			p3_err -= 360
+		while p2_err <= -180:
+			p2_err += 360
+		while p2_err > 180:
+			p2_err -= 360
+		while p1_err <= -180:
+			p1_err += 360
+		while p1_err > 180:
+			p1err -= 360
+		while p0_err <= -180:
+			p0_err += 360
+		while p0_err > 180:
+			p0_err -= 360
 
 
 		# Normalize phase error to subcarrier index position
@@ -311,17 +320,17 @@ def main():
 		plt.ylim(-1.5,1.5)
 		plt.grid('true')
 		plt.title(f'Fine Ranging Symbol\nPilots')
-		plt.scatter(Symbol_Output[p0].real, Symbol_Output[p0].imag)
-		plt.scatter(Symbol_Output[p1].real, Symbol_Output[p1].imag)
-		plt.scatter(Symbol_Output[p2].real, Symbol_Output[p2].imag)
-		plt.scatter(Symbol_Output[p3].real, Symbol_Output[p3].imag)
+		plt.scatter(Symbol_Output[p0].real, Symbol_Output[p0].imag, s=8)
+		plt.scatter(Symbol_Output[p1].real, Symbol_Output[p1].imag, s=8)
+		plt.scatter(Symbol_Output[p2].real, Symbol_Output[p2].imag, s=8)
+		plt.scatter(Symbol_Output[p3].real, Symbol_Output[p3].imag, s=8)
 		plt.plot([0,Symbol_Output[p0].real],[0,Symbol_Output[p0].imag])
 		plt.plot([0,Symbol_Output[p1].real],[0,Symbol_Output[p1].imag])
 		plt.plot([0,Symbol_Output[p2].real],[0,Symbol_Output[p2].imag])
 		plt.plot([0,Symbol_Output[p3].real],[0,Symbol_Output[p3].imag])
 		plt.legend([
 			f'{p0}: {(180/np.pi)*np.angle(Symbol_Output[p0]):.1f}, {np.abs(Symbol_Output[p0]):.2f}',
-			f'{p1}: {(180/np.pi)*np.angle(Symbol_Output[p1]):.1f}, {np.abs(Symbol_Output[p2]):.2f}',
+			f'{p1}: {(180/np.pi)*np.angle(Symbol_Output[p1]):.1f}, {np.abs(Symbol_Output[p1]):.2f}',
 			f'{p2}: {(180/np.pi)*np.angle(Symbol_Output[p2]):.1f}, {np.abs(Symbol_Output[p2]):.2f}',
 			f'{p3}: {(180/np.pi)*np.angle(Symbol_Output[p3]):.1f}, {np.abs(Symbol_Output[p3]):.2f}'
 		])
@@ -330,10 +339,10 @@ def main():
 		plt.ylim(-1.5,1.5)
 		plt.grid('true')
 		plt.title(f'Symbol 2\nPilots')
-		plt.scatter(Symbol2_Output[p0].real, Symbol2_Output[p0].imag)
-		plt.scatter(Symbol2_Output[p1].real, Symbol2_Output[p1].imag)
-		plt.scatter(Symbol2_Output[p2].real, Symbol2_Output[p2].imag)
-		plt.scatter(Symbol2_Output[p3].real, Symbol2_Output[p3].imag)
+		plt.scatter(Symbol2_Output[p0].real, Symbol2_Output[p0].imag, s=8)
+		plt.scatter(Symbol2_Output[p1].real, Symbol2_Output[p1].imag, s=8)
+		plt.scatter(Symbol2_Output[p2].real, Symbol2_Output[p2].imag, s=8)
+		plt.scatter(Symbol2_Output[p3].real, Symbol2_Output[p3].imag, s=8)
 		plt.plot([0,Symbol2_Output[p0].real],[0,Symbol2_Output[p0].imag])
 		plt.plot([0,Symbol2_Output[p1].real],[0,Symbol2_Output[p1].imag])
 		plt.plot([0,Symbol2_Output[p2].real],[0,Symbol2_Output[p2].imag])
@@ -349,10 +358,10 @@ def main():
 		plt.ylim(-1.5,1.5)
 		plt.grid('true')
 		plt.title(f'Symbol 3\nPilots')
-		plt.scatter(Symbol3_Output[p0].real, Symbol3_Output[p0].imag)
-		plt.scatter(Symbol3_Output[p1].real, Symbol3_Output[p1].imag)
-		plt.scatter(Symbol3_Output[p2].real, Symbol3_Output[p2].imag)
-		plt.scatter(Symbol3_Output[p3].real, Symbol3_Output[p3].imag)
+		plt.scatter(Symbol3_Output[p0].real, Symbol3_Output[p0].imag, s=8)
+		plt.scatter(Symbol3_Output[p1].real, Symbol3_Output[p1].imag, s=8)
+		plt.scatter(Symbol3_Output[p2].real, Symbol3_Output[p2].imag, s=8)
+		plt.scatter(Symbol3_Output[p3].real, Symbol3_Output[p3].imag, s=8)
 		plt.plot([0,Symbol3_Output[p0].real],[0,Symbol3_Output[p0].imag])
 		plt.plot([0,Symbol3_Output[p1].real],[0,Symbol3_Output[p1].imag])
 		plt.plot([0,Symbol3_Output[p2].real],[0,Symbol3_Output[p2].imag])
@@ -368,10 +377,10 @@ def main():
 		plt.ylim(-1.5,1.5)
 		plt.grid('true')
 		plt.title(f'Symbol 4\nPilots')
-		plt.scatter(Symbol4_Output[p0].real, Symbol4_Output[p0].imag)
-		plt.scatter(Symbol4_Output[p1].real, Symbol4_Output[p1].imag)
-		plt.scatter(Symbol4_Output[p2].real, Symbol4_Output[p2].imag)
-		plt.scatter(Symbol4_Output[p3].real, Symbol4_Output[p3].imag)
+		plt.scatter(Symbol4_Output[p0].real, Symbol4_Output[p0].imag, s=8)
+		plt.scatter(Symbol4_Output[p1].real, Symbol4_Output[p1].imag, s=8)
+		plt.scatter(Symbol4_Output[p2].real, Symbol4_Output[p2].imag, s=8)
+		plt.scatter(Symbol4_Output[p3].real, Symbol4_Output[p3].imag, s=8)
 		plt.plot([0,Symbol4_Output[p0].real],[0,Symbol4_Output[p0].imag])
 		plt.plot([0,Symbol4_Output[p1].real],[0,Symbol4_Output[p1].imag])
 		plt.plot([0,Symbol4_Output[p2].real],[0,Symbol4_Output[p2].imag])
@@ -387,41 +396,41 @@ def main():
 		plt.ylim(-1.5,1.5)
 		plt.grid('true')
 		plt.title(f'Fine Ranging Symbol\nData Subcarriers')
-		plt.scatter(Symbol_Output[0:p0].real, Symbol_Output[0:p0].imag)
-		plt.scatter(Symbol_Output[p0+1:p1].real, Symbol_Output[p0+1:p1].imag)
-		plt.scatter(Symbol_Output[p1+1:p2].real, Symbol_Output[p1+1:p2].imag)
-		plt.scatter(Symbol_Output[p2+1:p3].real, Symbol_Output[p2+1:p3].imag)
-		plt.scatter(Symbol_Output[p3+1:].real, Symbol_Output[p3+1:].imag)
+		plt.scatter(Symbol_Output[0:p0].real, Symbol_Output[0:p0].imag, s=2)
+		plt.scatter(Symbol_Output[p0+1:p1].real, Symbol_Output[p0+1:p1].imag, s=2)
+		plt.scatter(Symbol_Output[p1+1:p2].real, Symbol_Output[p1+1:p2].imag, s=2)
+		plt.scatter(Symbol_Output[p2+1:p3].real, Symbol_Output[p2+1:p3].imag, s=2)
+		plt.scatter(Symbol_Output[p3+1:].real, Symbol_Output[p3+1:].imag, s=2)
 		plt.subplot(246)
 		plt.xlim(-1.5,1.5)
 		plt.ylim(-1.5,1.5)
 		plt.grid('true')
 		plt.title(f'Symbol 2\nData Subcarriers')
-		plt.scatter(Symbol2_Output[0:p0].real, Symbol2_Output[0:p0].imag)
-		plt.scatter(Symbol2_Output[p0+1:p1].real, Symbol2_Output[p0+1:p1].imag)
-		plt.scatter(Symbol2_Output[p1+1:p2].real, Symbol2_Output[p1+1:p2].imag)
-		plt.scatter(Symbol2_Output[p2+1:p3].real, Symbol2_Output[p2+1:p3].imag)
-		plt.scatter(Symbol2_Output[p3+1:].real, Symbol2_Output[p3+1:].imag)
+		plt.scatter(Symbol2_Output[0:p0].real, Symbol2_Output[0:p0].imag, s=2)
+		plt.scatter(Symbol2_Output[p0+1:p1].real, Symbol2_Output[p0+1:p1].imag, s=2)
+		plt.scatter(Symbol2_Output[p1+1:p2].real, Symbol2_Output[p1+1:p2].imag, s=2)
+		plt.scatter(Symbol2_Output[p2+1:p3].real, Symbol2_Output[p2+1:p3].imag, s=2)
+		plt.scatter(Symbol2_Output[p3+1:].real, Symbol2_Output[p3+1:].imag, s=2)
 		plt.subplot(247)
 		plt.xlim(-1.5,1.5)
 		plt.ylim(-1.5,1.5)
 		plt.grid('true')
 		plt.title(f'Symbol 3\nData Subcarriers')
-		plt.scatter(Symbol3_Output[0:p0].real, Symbol3_Output[0:p0].imag)
-		plt.scatter(Symbol3_Output[p0+1:p1].real, Symbol3_Output[p0+1:p1].imag)
-		plt.scatter(Symbol3_Output[p1+1:p2].real, Symbol3_Output[p1+1:p2].imag)
-		plt.scatter(Symbol3_Output[p2+1:p3].real, Symbol3_Output[p2+1:p3].imag)
-		plt.scatter(Symbol3_Output[p3+1:].real, Symbol3_Output[p3+1:].imag)
+		plt.scatter(Symbol3_Output[0:p0].real, Symbol3_Output[0:p0].imag, s=2)
+		plt.scatter(Symbol3_Output[p0+1:p1].real, Symbol3_Output[p0+1:p1].imag, s=2)
+		plt.scatter(Symbol3_Output[p1+1:p2].real, Symbol3_Output[p1+1:p2].imag, s=2)
+		plt.scatter(Symbol3_Output[p2+1:p3].real, Symbol3_Output[p2+1:p3].imag, s=2)
+		plt.scatter(Symbol3_Output[p3+1:].real, Symbol3_Output[p3+1:].imag, s=2)
 		plt.subplot(248)
 		plt.xlim(-1.5,1.5)
 		plt.ylim(-1.5,1.5)
 		plt.grid('true')
 		plt.title(f'Symbol 3\nData Subcarriers')
-		plt.scatter(Symbol4_Output[0:p0].real, Symbol3_Output[0:p0].imag)
-		plt.scatter(Symbol4_Output[p0+1:p1].real, Symbol4_Output[p0+1:p1].imag)
-		plt.scatter(Symbol4_Output[p1+1:p2].real, Symbol4_Output[p1+1:p2].imag)
-		plt.scatter(Symbol4_Output[p2+1:p3].real, Symbol4_Output[p2+1:p3].imag)
-		plt.scatter(Symbol4_Output[p3+1:].real, Symbol4_Output[p3+1:].imag)
+		plt.scatter(Symbol4_Output[0:p0].real, Symbol3_Output[0:p0].imag, s=2)
+		plt.scatter(Symbol4_Output[p0+1:p1].real, Symbol4_Output[p0+1:p1].imag, s=2)
+		plt.scatter(Symbol4_Output[p1+1:p2].real, Symbol4_Output[p1+1:p2].imag, s=2)
+		plt.scatter(Symbol4_Output[p2+1:p3].real, Symbol4_Output[p2+1:p3].imag, s=2)
+		plt.scatter(Symbol4_Output[p3+1:].real, Symbol4_Output[p3+1:].imag, s=2)
 		plt.show()
 
 if __name__ == "__main__":
