@@ -259,7 +259,7 @@ def main():
 
 		
 		# Correct for local oscillator phase difference by rotating the symbol output.
-		lo_phase_correction = Symbol_Output[p0].conj()
+		lo_phase_correction = (Symbol_Output[p0].conj()-Symbol_Output[p3].conj()) / 2
 		Symbol_Output= np.multiply(Symbol_Output, lo_phase_correction)
 		
 
@@ -438,7 +438,7 @@ def main():
 		plt.xlim(-1.5,1.5)
 		plt.ylim(-1.5,1.5)
 		plt.grid('true')
-		plt.title(f'Symbol 3\nData Subcarriers')
+		plt.title(f'Symbol 4\nData Subcarriers')
 		plt.scatter(Symbol4_Output[0:p0].real, Symbol3_Output[0:p0].imag, s=2)
 		plt.scatter(Symbol4_Output[p0+1:p1].real, Symbol4_Output[p0+1:p1].imag, s=2)
 		plt.scatter(Symbol4_Output[p1+1:p2].real, Symbol4_Output[p1+1:p2].imag, s=2)
