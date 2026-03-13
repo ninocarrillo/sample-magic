@@ -155,7 +155,7 @@ def main():
 
 	# Attempt Schmidl-Cox conjugate correlation
 	FFT_N = 64
-	Oversample = int(6 / decimation_rate)
+	Oversample = int(baseband_sample_rate / 2000)
 	L = int(Oversample * FFT_N / 2)
 	
 	# Create empty list to place metric P values
@@ -215,6 +215,7 @@ def main():
 				Sync_Arm_Timer = 0
 				Sync_Arm = 0
 			
+	print('Coarse timing trigger samples:')
 	print(Sync_List)
 
 	plt.figure()
@@ -235,16 +236,16 @@ def main():
 
 
 	# Decimate from selected sample
-	p0 = 7
-	p1 = 21
-	p2 = 43
-	p3 = 57
+	p0 = 7 # 0 Phase
+	p1 = 21 # 0 Phase
+	p2 = 43 # 0 Phase
+	p3 = 57 # 180 Phase
 
 	CP_Length = 8 * Oversample
-	#fudge =(Oversample * 2)-int(np.ceil(Oversample / 2))
-	fudge = 0
+	fudge =(Oversample * 2)-int(np.ceil(Oversample / 2))
+	#fudge = 0
 	if Oversample > 1:
-		fudge += int(Oversample * 3 // 2)
+		fudge = int(Oversample * 3 // 2)
 	for SC_Peak_Sample in Sync_List:
 		# Working fudge values by oversample:
 		# Oversample 6: 9 samples
@@ -253,32 +254,67 @@ def main():
 		# Oversample 1: 0 samples
 		SC_Offset = (2 * L) + CP_Length + fudge
 		Start_i = SC_Peak_Sample + SC_Offset
+
+		# Collect and process the fine ranging symbol
 		Symbol_Baseband = baseband_samples[Start_i:Start_i + (Oversample * FFT_N):Oversample]
+		Symbol_Output = np.fft.fft(Symbol_Baseband, FFT_N)
+
+		# Calculate phase error of each pilot in fine ranging symbol
+		p0_err = np.angle(Symbol_Output[p0], deg=True)
+		p1_err = np.angle(Symbol_Output[p1], deg=True)
+		p2_err = -np.angle(Symbol_Output[p2], deg=True)
+		p3_err = -180-np.angle(Symbol_Output[p3], deg=True)
+		while p3_err <= -180:
+			p3_err += 360
+		while p3_err > 180:
+			p3_err -= 360
+
+
+		# Normalize phase error to subcarrier index position
+		p0_err_norm = p0_err / (p0+1)
+		p1_err_norm = p1_err / (p1+1)
+		p2_err_norm = p2_err / (64-p2)
+		p3_err_norm = p3_err / (64-p3)
+
+		fine_range_exact = np.average([p0_err_norm, p1_err_norm, p2_err_norm, p3_err_norm]) # degrees per subcarrier
+
+		# convert the fine range estimate to time units
+		print(f'Baseband Sample Rate: {baseband_sample_rate} Hz')
+		bin_spacing = baseband_sample_rate / (FFT_N * Oversample)
+		print(f'Bin spacing: {bin_spacing} Hz')
+		time_offset = fine_range_exact / (bin_spacing * 360)
+		fine_range_sample_offset = time_offset * baseband_sample_rate
+		print(f'Sample time offset: {time_offset * 1e3:.2f} ms, {fine_range_sample_offset:.2f} samples')
+
+
+		print(f'Pilot 0 Error: {p0_err:.2f} deg, {p0_err_norm:.2f} deg/sub')
+		print(f'Pilot 1 Error: {p1_err:.2f} deg, {p1_err_norm:.2f} deg/sub')
+		print(f'Pilot 2 Error: {p2_err:.2f} deg, {p2_err_norm:.2f} deg/sub')
+		print(f'Pilot 3 Error: {p3_err:.2f} deg, {p3_err_norm:.2f} deg/sub')
+		print(f'Average pilot error: {fine_range_exact:.2f} deg/sub')
+
+		Start_i -= int(np.round(fine_range_sample_offset, decimals=0))
+
 		Symbol2_Baseband = baseband_samples[Start_i+(Oversample * (FFT_N+8)):(Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):Oversample]
 		Symbol3_Baseband = baseband_samples[Start_i+(2*Oversample * (FFT_N+8)):(2*Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):Oversample]
 		Symbol4_Baseband = baseband_samples[Start_i+(3*Oversample * (FFT_N+8)):(3*Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):Oversample]
-		Symbol_Output = np.fft.fft(Symbol_Baseband, FFT_N)
-			
-		# Calculate IP400 offset
-		ip4o_p = 0.5*((Symbol_Output[p0] * Symbol_Output[p1].conj()) + (Symbol_Output[p2] * Symbol_Output[p3].conj()))
-		ip4o = np.angle(ip4o_p, deg=True) / FFT_N
+
 		
 		Symbol2_Output = np.fft.fft(Symbol2_Baseband, FFT_N)
 		Symbol3_Output = np.fft.fft(Symbol3_Baseband, FFT_N)
 		Symbol4_Output = np.fft.fft(Symbol4_Baseband, FFT_N)
 		fig,ax = plt.subplots(2,4)
-		plt.suptitle(f'Start Index {Start_i}, Oversample {Oversample}, Fudge {fudge}')
+		plt.suptitle(f'Start Index {Start_i}, Oversample {Oversample}, FRSO {fine_range_sample_offset:.2f}')
 		fig.tight_layout()
 		plt.subplot(241)
 		plt.xlim(-1.5,1.5)
 		plt.ylim(-1.5,1.5)
 		plt.grid('true')
-		plt.title(f'Fine Ranging Symbol\nPilots {ip4o:.2f}')
+		plt.title(f'Fine Ranging Symbol\nPilots')
 		plt.scatter(Symbol_Output[p0].real, Symbol_Output[p0].imag)
 		plt.scatter(Symbol_Output[p1].real, Symbol_Output[p1].imag)
 		plt.scatter(Symbol_Output[p2].real, Symbol_Output[p2].imag)
 		plt.scatter(Symbol_Output[p3].real, Symbol_Output[p3].imag)
-		plt.scatter(ip4o_p.real, ip4o_p.imag)
 		plt.plot([0,Symbol_Output[p0].real],[0,Symbol_Output[p0].imag])
 		plt.plot([0,Symbol_Output[p1].real],[0,Symbol_Output[p1].imag])
 		plt.plot([0,Symbol_Output[p2].real],[0,Symbol_Output[p2].imag])
