@@ -38,8 +38,11 @@ def main():
 	
 	frequency_error = (frequency - carrier_freq) / carrier_freq
 	
+	offset_frequency = carrier_freq - (frequency_error * carrier_freq)
+	print(f'Audio sample rate is {audio_sample_rate:.1f} Hz.')
 	print(f'Measured frequency is {frequency:.6f} Hz.')
-	print(f'Frequency error is {(frequency_error * 1e6):.1f} ppm')
+	print(f'Frequency error is {(frequency_error * 1e6):.1f} ppm.')
+	print(f'Offset Carrier is {offset_frequency:.6f} Hz.')
 
 				
 

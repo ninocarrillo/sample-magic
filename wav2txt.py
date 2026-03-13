@@ -83,9 +83,10 @@ def main():
 
 	# Mix audio with complex carrier freq to move spectrum to baseband
 	baseband_samples = np.zeros(audio_sample_count, dtype=complex)
+	carrier_phase = 0
 	for i in range(audio_sample_count):
 		time_var = 2 * np.pi * i * (-carrier_freq) / audio_sample_rate
-		baseband_samples[i] = audio_samples[i] * np.exp(time_var * 1j)
+		baseband_samples[i] = audio_samples[i] * np.exp((time_var + carrier_phase) * 1j)
 
 	baseband_sample_rate = audio_sample_rate
 
@@ -256,6 +257,12 @@ def main():
 		Symbol_Baseband = baseband_samples[Start_i:Start_i + (Oversample * FFT_N):Oversample]
 		Symbol_Output = np.fft.fft(Symbol_Baseband, FFT_N)
 
+		
+		# Correct for local oscillator phase difference by rotating the symbol output.
+		lo_phase_correction = Symbol_Output[p0].conj()
+		Symbol_Output= np.multiply(Symbol_Output, lo_phase_correction)
+		
+
 		# Calculate phase error of each pilot in fine ranging symbol
 		p0_err = np.angle(Symbol_Output[p0], deg=True)
 		p1_err = np.angle(Symbol_Output[p1], deg=True)
@@ -312,8 +319,14 @@ def main():
 		Symbol2_Output = np.fft.fft(Symbol2_Baseband, FFT_N)
 		Symbol3_Output = np.fft.fft(Symbol3_Baseband, FFT_N)
 		Symbol4_Output = np.fft.fft(Symbol4_Baseband, FFT_N)
+		
+		# Correct for lo phase offset
+		Symbol2_Output= np.multiply(Symbol2_Output, lo_phase_correction)
+		Symbol3_Output= np.multiply(Symbol3_Output, lo_phase_correction)
+		Symbol4_Output= np.multiply(Symbol4_Output, lo_phase_correction)
+		
 		fig,ax = plt.subplots(2,4)
-		plt.suptitle(f'Start Index {Start_i}, Oversample {Oversample}, FRSO {fine_range_sample_offset:.2f}')
+		plt.suptitle(f'Start Index {Start_i}, Oversample {Oversample}\nLO Phase Error {np.angle(lo_phase_correction, deg=True):.1f}, Sample Error {fine_range_sample_offset:.2f}')
 		fig.tight_layout()
 		plt.subplot(241)
 		plt.xlim(-1.5,1.5)
