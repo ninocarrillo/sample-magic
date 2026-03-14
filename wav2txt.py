@@ -257,6 +257,52 @@ def main():
 		Symbol_Baseband = baseband_samples[Start_i:Start_i + (Oversample * FFT_N):Oversample]
 		Symbol_Output = np.fft.fft(Symbol_Baseband, FFT_N)
 
+
+		# Deterimine nearest expected phase angle for each subcarrier
+		# FRS_Phase = np.zeros(FFT_N)
+		# Phase_Options = [0,np.pi,-np.pi,np.pi/2,-np.pi/2,np.pi/4,3*np.pi/4,-3*np.pi/4,-np.pi/4]
+		# FRS_Phase_Error = np.zeros(FFT_N)
+		# for i in range(FFT_N):
+		# 	Option_Errors = np.zeros(len(Phase_Options))
+		# 	for j in range(len(Phase_Options)):
+		# 		Option_Errors[j] = np.angle(Symbol_Output[i]) - Phase_Options[j]
+		# 		FRS_Phase[i] = Phase_Options[np.argmin(np.abs(Option_Errors))]
+		# 	FRS_Phase_Error[i] = np.angle(Symbol_Output[i]) - FRS_Phase[i]
+		# print("Estimated Fine Range Symbol subcarrier phases:")
+		# print("[", end='')
+		# for i in range(FFT_N):
+		# 	print(f'{FRS_Phase[i]*180/np.pi:.0f}',end='')
+		# 	if i < (FFT_N-1):
+		# 		print(',',end='')
+		# print("]")
+
+		FRS_Phase = [135,-90,45,135,-45,45,-45,0,-45,135,-45,45,135,-135,45,-45,135,-45,-45,135,-135,0,-45,-45,-135,-135,-45,-45,-135,45,-135,45,135,135,-135,135,-135,45,-45,-45,135,-45,45,0,-135,-135,135,135,-45,45,45,-45,-135,-135,45,-45,45,-180,-45,-135,-135,45,-135,-135]
+		FRS_Phase_Error = np.zeros(FFT_N)
+		for i in range(FFT_N):
+			FRS_Phase_Error[i] = np.mod(180+(180 * np.angle(Symbol_Output[i]) / np.pi) - FRS_Phase[i], 360) - 180
+
+		# plot uncorrected Fine Ranging Symbol phase and magnitude
+		fig,ax = plt.subplots(2,1)
+		plt.suptitle("Fine Ranging Symbol Analysis")
+		plt.subplot(211)
+		plt.title("Phase Angle Error, Degrees")
+		plt.grid(True)
+		plt.xticks([7,21,FFT_N/2,43,57])
+		plt.yticks([-180,-90,0,90,180])
+		plt.ylim(-200,200)
+		#plt.scatter(np.linspace(0,FFT_N,num=FFT_N,endpoint=False),np.angle(Symbol_Output),s=2)
+		#plt.scatter(np.linspace(0,FFT_N,num=FFT_N,endpoint=False),FRS_Phase,s=2)
+		plt.scatter(np.linspace(0,FFT_N,num=FFT_N,endpoint=False),FRS_Phase_Error,s=2)
+		#plt.ylim(-2*np.pi,2*np.pi)
+		plt.subplot(212)
+		plt.title("Magnitude")
+		plt.grid(True)
+		plt.xticks([7,21,FFT_N/2,43,57])
+		plt.ylim(-0.1,2)
+
+		plt.scatter(np.linspace(0,FFT_N,num=FFT_N,endpoint=False),np.abs(Symbol_Output),s=2)
+		plt.show()
+
 		
 		# Correct for local oscillator phase difference by rotating the symbol output.
 		lo_phase_correction = (Symbol_Output[p0].conj()-Symbol_Output[p3].conj()) / 2
