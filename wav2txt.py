@@ -341,7 +341,7 @@ def main():
 		plt.scatter(np.linspace(0,FFT_N,num=FFT_N,endpoint=False),Corrected_Phase_Error,s=2)
 		plt.legend(['Unequalized', 'Equalized'])
 		plt.subplot(212)
-		plt.title("Magnitude")
+		plt.title("Magnitude Error")
 		plt.grid(True)
 		plt.xticks([7,21,FFT_N/2,43,57])
 		plt.ylim(-1.5,1.5)
@@ -397,7 +397,7 @@ def main():
 		plt.xlim(-1.5,1.5)
 		plt.ylim(-1.5,1.5)
 		plt.grid('true')
-		plt.title(f'Symbol 2\nPilots')
+		plt.title(f'Symbol 2Pilots')
 		for i in pilot_index:
 			plt.plot([0,Symbol2_Output[i].real],[0,Symbol2_Output[i].imag], color='grey')
 			plt.plot([0,Eq_Symbol2_Output[i].real],[0,Eq_Symbol2_Output[i].imag], color='red')
