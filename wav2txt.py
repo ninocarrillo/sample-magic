@@ -11,6 +11,17 @@ from scipy.fft import fft, fftfreq
 from scipy.signal import firwin
 
 
+def CalcSubcarrierError(symbol):
+	FRS_Phase = [135,-90,45,135,-45,45,-45,0,-45,135,-45,45,135,-135,45,-45,135,-45,-45,135,-135,0,-45,-45,-135,-135,-45,-45,-135,45,-135,45,135,135,-135,135,-135,45,-45,-45,135,-45,45,0,-135,-135,135,135,-45,45,45,-45,-135,-135,45,-45,45,-180,-45,-135,-135,45,-135,-135]
+	
+	FRS_Symbol = np.exp(np.multiply(1j*np.pi/180,FRS_Phase))
+	FRS_Error = FRS_Symbol.conj() * symbol
+	FRS_Error = FRS_Error * (1/np.power(np.abs(FRS_Error),2))
+	FRS_Phase_Error = np.zeros(len(symbol))
+	for i in range(len(symbol)):
+		FRS_Phase_Error[i] = np.mod(180+(180 * np.angle(symbol[i]) / np.pi) - FRS_Phase[i], 360) - 180
+	return FRS_Phase_Error, FRS_Error
+
 
 def AnalyzeSpectrum(waveform, sample_rate, power_ratio):
 	fft_n = len(waveform)
@@ -276,10 +287,22 @@ def main():
 		# 		print(',',end='')
 		# print("]")
 
-		FRS_Phase = [135,-90,45,135,-45,45,-45,0,-45,135,-45,45,135,-135,45,-45,135,-45,-45,135,-135,0,-45,-45,-135,-135,-45,-45,-135,45,-135,45,135,135,-135,135,-135,45,-45,-45,135,-45,45,0,-135,-135,135,135,-45,45,45,-45,-135,-135,45,-45,45,-180,-45,-135,-135,45,-135,-135]
-		FRS_Phase_Error = np.zeros(FFT_N)
-		for i in range(FFT_N):
-			FRS_Phase_Error[i] = np.mod(180+(180 * np.angle(Symbol_Output[i]) / np.pi) - FRS_Phase[i], 360) - 180
+		#FRS_Phase = [135,-90,45,135,-45,45,-45,0,-45,135,-45,45,135,-135,45,-45,135,-45,-45,135,-135,0,-45,-45,-135,-135,-45,-45,-135,45,-135,45,135,135,-135,135,-135,45,-45,-45,135,-45,45,0,-135,-135,135,135,-45,45,45,-45,-135,-135,45,-45,45,-180,-45,-135,-135,45,-135,-135]
+		#FRS_Phase_Error = np.zeros(FFT_N)
+		#for i in range(FFT_N):
+		#	FRS_Phase_Error[i] = np.mod(180+(180 * np.angle(Symbol_Output[i]) / np.pi) - FRS_Phase[i], 360) - 180
+
+		FRS_Phase_Error, FRS_Error_Symbol = CalcSubcarrierError(Symbol_Output)
+
+		FRS_Error_Symbol[0] = 0
+		FRS_Error_Symbol[1] = 0
+		FRS_Error_Symbol[32] = 0
+		
+
+		Corrected_Symbol = Symbol_Output * FRS_Error_Symbol.conj()
+
+		Corrected_Phase_Error, Corrected_Error_Symbol = CalcSubcarrierError(Corrected_Symbol)
+
 
 		# plot uncorrected Fine Ranging Symbol phase and magnitude
 		fig,ax = plt.subplots(2,1)
@@ -293,6 +316,7 @@ def main():
 		#plt.scatter(np.linspace(0,FFT_N,num=FFT_N,endpoint=False),np.angle(Symbol_Output),s=2)
 		#plt.scatter(np.linspace(0,FFT_N,num=FFT_N,endpoint=False),FRS_Phase,s=2)
 		plt.scatter(np.linspace(0,FFT_N,num=FFT_N,endpoint=False),FRS_Phase_Error,s=2)
+		plt.scatter(np.linspace(0,FFT_N,num=FFT_N,endpoint=False),Corrected_Phase_Error,s=2)
 		#plt.ylim(-2*np.pi,2*np.pi)
 		plt.subplot(212)
 		plt.title("Magnitude")
@@ -301,12 +325,14 @@ def main():
 		plt.ylim(-0.1,2)
 
 		plt.scatter(np.linspace(0,FFT_N,num=FFT_N,endpoint=False),np.abs(Symbol_Output),s=2)
+		plt.scatter(np.linspace(0,FFT_N,num=FFT_N,endpoint=False),np.abs(Corrected_Symbol),s=2)
 		plt.show()
 
+		Symbol_Output = Symbol_Output * FRS_Error_Symbol.conj()
 		
 		# Correct for local oscillator phase difference by rotating the symbol output.
 		lo_phase_correction = (Symbol_Output[p0].conj()-Symbol_Output[p3].conj()) / 2
-		Symbol_Output= np.multiply(Symbol_Output, lo_phase_correction)
+		#Symbol_Output= np.multiply(Symbol_Output, lo_phase_correction)
 		
 
 		# Calculate phase error of each pilot in fine ranging symbol
@@ -355,7 +381,7 @@ def main():
 		print(f'Pilot 3 Error: {p3_err:.2f} deg, {p3_err_norm:.2f} deg/sub')
 		print(f'Average pilot error: {fine_range_exact:.2f} deg/sub')
 
-		Start_i -= int(np.round(fine_range_sample_offset, decimals=0))
+		#Start_i -= int(np.round(fine_range_sample_offset, decimals=0))
 
 		Symbol2_Baseband = baseband_samples[Start_i+(Oversample * (FFT_N+8)):(Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):Oversample]
 		Symbol3_Baseband = baseband_samples[Start_i+(2*Oversample * (FFT_N+8)):(2*Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):Oversample]
@@ -367,9 +393,14 @@ def main():
 		Symbol4_Output = np.fft.fft(Symbol4_Baseband, FFT_N)
 		
 		# Correct for lo phase offset
-		Symbol2_Output= np.multiply(Symbol2_Output, lo_phase_correction)
-		Symbol3_Output= np.multiply(Symbol3_Output, lo_phase_correction)
-		Symbol4_Output= np.multiply(Symbol4_Output, lo_phase_correction)
+		#Symbol2_Output= np.multiply(Symbol2_Output, lo_phase_correction)
+		#Symbol3_Output= np.multiply(Symbol3_Output, lo_phase_correction)
+		#Symbol4_Output= np.multiply(Symbol4_Output, lo_phase_correction)
+
+		# Apply general equalization
+		Symbol2_Output *= FRS_Error_Symbol.conj()
+		Symbol3_Output *= FRS_Error_Symbol.conj()
+		Symbol4_Output *= FRS_Error_Symbol.conj()
 		
 		fig,ax = plt.subplots(2,4)
 		plt.suptitle(f'Start Index {Start_i}, Oversample {Oversample}\nLO Phase Error {np.angle(lo_phase_correction, deg=True):.1f}, Sample Error {fine_range_sample_offset:.2f}')
