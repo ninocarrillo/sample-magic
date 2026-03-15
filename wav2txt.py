@@ -13,16 +13,76 @@ from scipy.signal import firwin
 
 def CalcSubcarrierError(symbol):
 	FRS_Phase = [135,-90,45,135,-45,45,-45,0,-45,135,-45,45,135,-135,45,-45,135,-45,-45,135,-135,0,-45,-45,-135,-135,-45,-45,-135,45,-135,45,135,135,-135,135,-135,45,-45,-45,135,-45,45,0,-135,-135,135,135,-45,45,45,-45,-135,-135,45,-45,45,-180,-45,-135,-135,45,-135,-135]
-	
 	FRS_Symbol = np.exp(np.multiply(1j*np.pi/180,FRS_Phase))
-	FRS_Error = FRS_Symbol.conj() * symbol
-	FRS_Error = FRS_Error * (1/np.power(np.abs(FRS_Error),2))
-	FRS_Phase_Error = np.zeros(len(symbol))
-	for i in range(len(symbol)):
-		FRS_Phase_Error[i] = np.mod(180+(180 * np.angle(symbol[i]) / np.pi) - FRS_Phase[i], 360) - 180
-	return FRS_Phase_Error, FRS_Error
+	Error_Vector = FRS_Symbol.conj() * symbol
+	Error_Vector = Error_Vector * (1/np.power(np.abs(Error_Vector),2))
+	Phase_Error = np.angle(Error_Vector) * 180 / np.pi
+	Mag_Error = np.abs(symbol) - np.abs(FRS_Symbol)
+	# Remove data for empty subcarriers
+	Error_Vector[0] = 0
+	Error_Vector[1] = 0
+	Error_Vector[32] = 0
+	return Error_Vector, Phase_Error, Mag_Error
+	
+def CalcPilotError(symbol, bb_fs, oversample):
+	p0 = 7 # 0 Phase
+	p1 = 21 # 0 Phase
+	p2 = 43 # 0 Phase
+	p3 = 57 # 180 Phase
+	lo_phase_correction = (symbol[p0].conj()-symbol[p3].conj()) / 2
+	
+	# Calculate phase error of each pilot in fine ranging symbol
+	p0_err = np.angle(symbol[p0], deg=True)
+	p1_err = np.angle(symbol[p1], deg=True)
+	p2_err = -np.angle(symbol[p2], deg=True)
+	p3_err = -180-np.angle(symbol[p3], deg=True)
+	while p3_err <= -180:
+		p3_err += 360
+	while p3_err > 180:
+		p3_err -= 360
+	while p2_err <= -180:
+		p2_err += 360
+	while p2_err > 180:
+		p2_err -= 360
+	while p1_err <= -180:
+		p1_err += 360
+	while p1_err > 180:
+		p1err -= 360
+	while p0_err <= -180:
+		p0_err += 360
+	while p0_err > 180:
+		p0_err -= 360
+		
+	# Normalize phase error to subcarrier index position
+	p0_err_norm = p0_err / (p0+1)
+	p1_err_norm = p1_err / (p1+1)
+	p2_err_norm = p2_err / (64-p2)
+	p3_err_norm = p3_err / (64-p3)
+
+	fine_range_exact = np.average([p0_err_norm, p1_err_norm, p2_err_norm, p3_err_norm]) # degrees per subcarrier
+
+	# convert the fine range estimate to time units
+	print(f'Baseband Sample Rate: {bb_fs} Hz')
+	bin_spacing = bb_fs / (len(symbol) * oversample)
+	print(f'Bin spacing: {bin_spacing} Hz')
+	time_offset = fine_range_exact / (bin_spacing * 360)
+	pilot_sample_offset = time_offset * bb_fs
+	print(f'Sample time offset: {time_offset * 1e3:.2f} ms, {pilot_sample_offset:.2f} samples')
 
 
+	print(f'Pilot 0 Error: {p0_err:.2f} deg, {p0_err_norm:.2f} deg/sub')
+	print(f'Pilot 1 Error: {p1_err:.2f} deg, {p1_err_norm:.2f} deg/sub')
+	print(f'Pilot 2 Error: {p2_err:.2f} deg, {p2_err_norm:.2f} deg/sub')
+	print(f'Pilot 3 Error: {p3_err:.2f} deg, {p3_err_norm:.2f} deg/sub')
+	print(f'Average pilot error: {fine_range_exact:.2f} deg/sub')
+	return pilot_sample_offset
+
+def AvgSubcarriers(symbol, carrier_list):
+	y = 0j
+	for i in carrier_list:
+		y += symbol[i]
+	return y / len(carrier_list)
+	
 def AnalyzeSpectrum(waveform, sample_rate, power_ratio):
 	fft_n = len(waveform)
 	time_step = 1 / sample_rate
@@ -248,279 +308,143 @@ def main():
 
 
 	# Decimate from selected sample
-	p0 = 7 # 0 Phase
-	p1 = 21 # 0 Phase
-	p2 = 43 # 0 Phase
-	p3 = 57 # 180 Phase
+	
+	# Location of pilot subcarriers
+	pilot_index = [7,21,43,57]
 
 	CP_Length = 8 * Oversample
-	fudge = int(Oversample * 1.5)
 	for SC_Peak_Sample in Sync_List:
-		# Working fudge values by oversample:
-		# Oversample 6: 9 samples
-		# Oversample 3: 4 samples
-		# Oversample 2: 3 samples
-		# Oversample 1: 0 samples
-		SC_Offset = (2 * L) + CP_Length + fudge
+		SC_Offset = (2 * L) + CP_Length + int(1.5 * Oversample)
 		Start_i = SC_Peak_Sample + SC_Offset
 
 		# Collect and process the fine ranging symbol
 		Symbol_Baseband = baseband_samples[Start_i:Start_i + (Oversample * FFT_N):Oversample]
 		Symbol_Output = np.fft.fft(Symbol_Baseband, FFT_N)
 
-
-		# Deterimine nearest expected phase angle for each subcarrier
-		# FRS_Phase = np.zeros(FFT_N)
-		# Phase_Options = [0,np.pi,-np.pi,np.pi/2,-np.pi/2,np.pi/4,3*np.pi/4,-3*np.pi/4,-np.pi/4]
-		# FRS_Phase_Error = np.zeros(FFT_N)
-		# for i in range(FFT_N):
-		# 	Option_Errors = np.zeros(len(Phase_Options))
-		# 	for j in range(len(Phase_Options)):
-		# 		Option_Errors[j] = np.angle(Symbol_Output[i]) - Phase_Options[j]
-		# 		FRS_Phase[i] = Phase_Options[np.argmin(np.abs(Option_Errors))]
-		# 	FRS_Phase_Error[i] = np.angle(Symbol_Output[i]) - FRS_Phase[i]
-		# print("Estimated Fine Range Symbol subcarrier phases:")
-		# print("[", end='')
-		# for i in range(FFT_N):
-		# 	print(f'{FRS_Phase[i]*180/np.pi:.0f}',end='')
-		# 	if i < (FFT_N-1):
-		# 		print(',',end='')
-		# print("]")
-
-		#FRS_Phase = [135,-90,45,135,-45,45,-45,0,-45,135,-45,45,135,-135,45,-45,135,-45,-45,135,-135,0,-45,-45,-135,-135,-45,-45,-135,45,-135,45,135,135,-135,135,-135,45,-45,-45,135,-45,45,0,-135,-135,135,135,-45,45,45,-45,-135,-135,45,-45,45,-180,-45,-135,-135,45,-135,-135]
-		#FRS_Phase_Error = np.zeros(FFT_N)
-		#for i in range(FFT_N):
-		#	FRS_Phase_Error[i] = np.mod(180+(180 * np.angle(Symbol_Output[i]) / np.pi) - FRS_Phase[i], 360) - 180
-
-		FRS_Phase_Error, FRS_Error_Symbol = CalcSubcarrierError(Symbol_Output)
-
-		FRS_Error_Symbol[0] = 0
-		FRS_Error_Symbol[1] = 0
-		FRS_Error_Symbol[32] = 0
-		
+		FRS_Error_Symbol, FRS_Phase_Error, FRS_Mag_Error = CalcSubcarrierError(Symbol_Output)
 
 		Corrected_Symbol = Symbol_Output * FRS_Error_Symbol.conj()
 
-		Corrected_Phase_Error, Corrected_Error_Symbol = CalcSubcarrierError(Corrected_Symbol)
+		Corrected_Error_Symbol, Corrected_Phase_Error, Corrected_Mag_Error = CalcSubcarrierError(Corrected_Symbol)
 
 
-		# plot uncorrected Fine Ranging Symbol phase and magnitude
+		# plot Fine Ranging Symbol phase and magnitude erros
 		fig,ax = plt.subplots(2,1)
 		plt.suptitle("Fine Ranging Symbol Analysis")
 		plt.subplot(211)
 		plt.title("Phase Angle Error, Degrees")
 		plt.grid(True)
 		plt.xticks([7,21,FFT_N/2,43,57])
-		plt.yticks([-180,-90,0,90,180])
+		plt.yticks([-180,-134,-90,-45,0,45,90,135,180])
 		plt.ylim(-200,200)
-		#plt.scatter(np.linspace(0,FFT_N,num=FFT_N,endpoint=False),np.angle(Symbol_Output),s=2)
-		#plt.scatter(np.linspace(0,FFT_N,num=FFT_N,endpoint=False),FRS_Phase,s=2)
 		plt.scatter(np.linspace(0,FFT_N,num=FFT_N,endpoint=False),FRS_Phase_Error,s=2)
 		plt.scatter(np.linspace(0,FFT_N,num=FFT_N,endpoint=False),Corrected_Phase_Error,s=2)
-		#plt.ylim(-2*np.pi,2*np.pi)
+		plt.legend(['Unequalized', 'Equalized'])
 		plt.subplot(212)
 		plt.title("Magnitude")
 		plt.grid(True)
 		plt.xticks([7,21,FFT_N/2,43,57])
-		plt.ylim(-0.1,2)
+		plt.ylim(-1.5,1.5)
 
-		plt.scatter(np.linspace(0,FFT_N,num=FFT_N,endpoint=False),np.abs(Symbol_Output),s=2)
-		plt.scatter(np.linspace(0,FFT_N,num=FFT_N,endpoint=False),np.abs(Corrected_Symbol),s=2)
+		plt.scatter(np.linspace(0,FFT_N,num=FFT_N,endpoint=False),FRS_Mag_Error,s=2)
+		plt.scatter(np.linspace(0,FFT_N,num=FFT_N,endpoint=False),Corrected_Mag_Error,s=2)
+		plt.legend(['Unequalized', 'Equalized'])
 		plt.show()
 
-		Symbol_Output = Symbol_Output * FRS_Error_Symbol.conj()
-		
-		# Correct for local oscillator phase difference by rotating the symbol output.
-		lo_phase_correction = (Symbol_Output[p0].conj()-Symbol_Output[p3].conj()) / 2
-		#Symbol_Output= np.multiply(Symbol_Output, lo_phase_correction)
-		
-
-		# Calculate phase error of each pilot in fine ranging symbol
-		p0_err = np.angle(Symbol_Output[p0], deg=True)
-		p1_err = np.angle(Symbol_Output[p1], deg=True)
-		p2_err = -np.angle(Symbol_Output[p2], deg=True)
-		p3_err = -180-np.angle(Symbol_Output[p3], deg=True)
-		while p3_err <= -180:
-			p3_err += 360
-		while p3_err > 180:
-			p3_err -= 360
-		while p2_err <= -180:
-			p2_err += 360
-		while p2_err > 180:
-			p2_err -= 360
-		while p1_err <= -180:
-			p1_err += 360
-		while p1_err > 180:
-			p1err -= 360
-		while p0_err <= -180:
-			p0_err += 360
-		while p0_err > 180:
-			p0_err -= 360
-
-
-		# Normalize phase error to subcarrier index position
-		p0_err_norm = p0_err / (p0+1)
-		p1_err_norm = p1_err / (p1+1)
-		p2_err_norm = p2_err / (64-p2)
-		p3_err_norm = p3_err / (64-p3)
-
-		fine_range_exact = np.average([p0_err_norm, p1_err_norm, p2_err_norm, p3_err_norm]) # degrees per subcarrier
-
-		# convert the fine range estimate to time units
-		print(f'Baseband Sample Rate: {baseband_sample_rate} Hz')
-		bin_spacing = baseband_sample_rate / (FFT_N * Oversample)
-		print(f'Bin spacing: {bin_spacing} Hz')
-		time_offset = fine_range_exact / (bin_spacing * 360)
-		fine_range_sample_offset = time_offset * baseband_sample_rate
-		print(f'Sample time offset: {time_offset * 1e3:.2f} ms, {fine_range_sample_offset:.2f} samples')
-
-
-		print(f'Pilot 0 Error: {p0_err:.2f} deg, {p0_err_norm:.2f} deg/sub')
-		print(f'Pilot 1 Error: {p1_err:.2f} deg, {p1_err_norm:.2f} deg/sub')
-		print(f'Pilot 2 Error: {p2_err:.2f} deg, {p2_err_norm:.2f} deg/sub')
-		print(f'Pilot 3 Error: {p3_err:.2f} deg, {p3_err_norm:.2f} deg/sub')
-		print(f'Average pilot error: {fine_range_exact:.2f} deg/sub')
-
-		#Start_i -= int(np.round(fine_range_sample_offset, decimals=0))
+		Eq_Symbol_Output = Symbol_Output * FRS_Error_Symbol.conj()
+		CalcPilotError(Eq_Symbol_Output, baseband_sample_rate, Oversample)
 
 		Symbol2_Baseband = baseband_samples[Start_i+(Oversample * (FFT_N+8)):(Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):Oversample]
-		Symbol3_Baseband = baseband_samples[Start_i+(2*Oversample * (FFT_N+8)):(2*Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):Oversample]
-		Symbol4_Baseband = baseband_samples[Start_i+(3*Oversample * (FFT_N+8)):(3*Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):Oversample]
-
-		
 		Symbol2_Output = np.fft.fft(Symbol2_Baseband, FFT_N)
-		Symbol3_Output = np.fft.fft(Symbol3_Baseband, FFT_N)
-		Symbol4_Output = np.fft.fft(Symbol4_Baseband, FFT_N)
+		Eq_Symbol2_Output = Symbol2_Output * FRS_Error_Symbol.conj()
+		s2_adj = int(round(CalcPilotError(Eq_Symbol2_Output, baseband_sample_rate, Oversample)))
+		Start_i -= s2_adj
 		
-		# Correct for lo phase offset
-		#Symbol2_Output= np.multiply(Symbol2_Output, lo_phase_correction)
-		#Symbol3_Output= np.multiply(Symbol3_Output, lo_phase_correction)
-		#Symbol4_Output= np.multiply(Symbol4_Output, lo_phase_correction)
-
-		# Apply general equalization
-		Symbol2_Output *= FRS_Error_Symbol.conj()
-		Symbol3_Output *= FRS_Error_Symbol.conj()
-		Symbol4_Output *= FRS_Error_Symbol.conj()
+		Symbol3_Baseband = baseband_samples[Start_i+(2*Oversample * (FFT_N+8)):(2*Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):Oversample]
+		Symbol3_Output = np.fft.fft(Symbol3_Baseband, FFT_N)
+		Eq_Symbol3_Output = Symbol3_Output * FRS_Error_Symbol.conj()
+		s3_adj = int(round(CalcPilotError(Eq_Symbol3_Output, baseband_sample_rate, Oversample)))
+		Start_i -= s3_adj
+		
+		Symbol4_Baseband = baseband_samples[Start_i+(3*Oversample * (FFT_N+8)):(3*Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):Oversample]
+		Symbol4_Output = np.fft.fft(Symbol4_Baseband, FFT_N)
+		Eq_Symbol4_Output = Symbol4_Output * FRS_Error_Symbol.conj()
+		
+		Subcarrier_List = []
+		j = 0
+		for i in range(FFT_N):
+			if i != 0:
+				if i != 1:
+					if i != 32:
+						Subcarrier_List.append(i)
+						
+		print(f'Subcarrier list is {len(Subcarrier_List)} elements long.')
+			
+		print(f'Fine Ranging Symbol Average Phase Error: {np.angle(AvgSubcarriers(FRS_Error_Symbol, Subcarrier_List), deg=True):.1f}')
 		
 		fig,ax = plt.subplots(2,4)
-		plt.suptitle(f'Start Index {Start_i}, Oversample {Oversample}\nLO Phase Error {np.angle(lo_phase_correction, deg=True):.1f}, Sample Error {fine_range_sample_offset:.2f}')
+		plt.suptitle(f'Start Index {Start_i}, Oversample {Oversample}, LO Phase Error {np.angle(AvgSubcarriers(FRS_Error_Symbol, Subcarrier_List), deg=True):.1f} deg\nUnequalized in grey, equalized in red')
 		fig.tight_layout()
 		plt.subplot(241)
 		plt.xlim(-1.5,1.5)
 		plt.ylim(-1.5,1.5)
 		plt.grid('true')
 		plt.title(f'Fine Ranging Symbol\nPilots')
-		plt.scatter(Symbol_Output[p0].real, Symbol_Output[p0].imag, s=8)
-		plt.scatter(Symbol_Output[p1].real, Symbol_Output[p1].imag, s=8)
-		plt.scatter(Symbol_Output[p2].real, Symbol_Output[p2].imag, s=8)
-		plt.scatter(Symbol_Output[p3].real, Symbol_Output[p3].imag, s=8)
-		plt.plot([0,Symbol_Output[p0].real],[0,Symbol_Output[p0].imag])
-		plt.plot([0,Symbol_Output[p1].real],[0,Symbol_Output[p1].imag])
-		plt.plot([0,Symbol_Output[p2].real],[0,Symbol_Output[p2].imag])
-		plt.plot([0,Symbol_Output[p3].real],[0,Symbol_Output[p3].imag])
-		plt.legend([
-			f'{p0}: {(180/np.pi)*np.angle(Symbol_Output[p0]):.1f}, {np.abs(Symbol_Output[p0]):.2f}',
-			f'{p1}: {(180/np.pi)*np.angle(Symbol_Output[p1]):.1f}, {np.abs(Symbol_Output[p1]):.2f}',
-			f'{p2}: {(180/np.pi)*np.angle(Symbol_Output[p2]):.1f}, {np.abs(Symbol_Output[p2]):.2f}',
-			f'{p3}: {(180/np.pi)*np.angle(Symbol_Output[p3]):.1f}, {np.abs(Symbol_Output[p3]):.2f}'
-		])
+		for i in pilot_index:
+			plt.plot([0,Symbol_Output[i].real],[0,Symbol_Output[i].imag], color='grey')
+			plt.plot([0,Eq_Symbol_Output[i].real],[0,Eq_Symbol_Output[i].imag], color='red')
 		plt.subplot(242)
 		plt.xlim(-1.5,1.5)
 		plt.ylim(-1.5,1.5)
 		plt.grid('true')
 		plt.title(f'Symbol 2\nPilots')
-		plt.scatter(Symbol2_Output[p0].real, Symbol2_Output[p0].imag, s=8)
-		plt.scatter(Symbol2_Output[p1].real, Symbol2_Output[p1].imag, s=8)
-		plt.scatter(Symbol2_Output[p2].real, Symbol2_Output[p2].imag, s=8)
-		plt.scatter(Symbol2_Output[p3].real, Symbol2_Output[p3].imag, s=8)
-		plt.plot([0,Symbol2_Output[p0].real],[0,Symbol2_Output[p0].imag])
-		plt.plot([0,Symbol2_Output[p1].real],[0,Symbol2_Output[p1].imag])
-		plt.plot([0,Symbol2_Output[p2].real],[0,Symbol2_Output[p2].imag])
-		plt.plot([0,Symbol2_Output[p3].real],[0,Symbol2_Output[p3].imag])
-		plt.legend([
-			f'{p0}: {(180/np.pi)*np.angle(Symbol2_Output[p0]):.1f}, {np.abs(Symbol2_Output[p0]):.2f}',
-			f'{p1}: {(180/np.pi)*np.angle(Symbol2_Output[p1]):.1f}, {np.abs(Symbol2_Output[p2]):.2f}',
-			f'{p2}: {(180/np.pi)*np.angle(Symbol2_Output[p2]):.1f}, {np.abs(Symbol2_Output[p2]):.2f}',
-			f'{p3}: {(180/np.pi)*np.angle(Symbol2_Output[p3]):.1f}, {np.abs(Symbol2_Output[p3]):.2f}'
-		])
+		for i in pilot_index:
+			plt.plot([0,Symbol2_Output[i].real],[0,Symbol2_Output[i].imag], color='grey')
+			plt.plot([0,Eq_Symbol2_Output[i].real],[0,Eq_Symbol2_Output[i].imag], color='red')
 		plt.subplot(243)
 		plt.xlim(-1.5,1.5)
 		plt.ylim(-1.5,1.5)
 		plt.grid('true')
-		plt.title(f'Symbol 3\nPilots')
-		plt.scatter(Symbol3_Output[p0].real, Symbol3_Output[p0].imag, s=8)
-		plt.scatter(Symbol3_Output[p1].real, Symbol3_Output[p1].imag, s=8)
-		plt.scatter(Symbol3_Output[p2].real, Symbol3_Output[p2].imag, s=8)
-		plt.scatter(Symbol3_Output[p3].real, Symbol3_Output[p3].imag, s=8)
-		plt.plot([0,Symbol3_Output[p0].real],[0,Symbol3_Output[p0].imag])
-		plt.plot([0,Symbol3_Output[p1].real],[0,Symbol3_Output[p1].imag])
-		plt.plot([0,Symbol3_Output[p2].real],[0,Symbol3_Output[p2].imag])
-		plt.plot([0,Symbol3_Output[p3].real],[0,Symbol3_Output[p3].imag])
-		plt.legend([
-			f'{p0}: {(180/np.pi)*np.angle(Symbol3_Output[p0]):.1f}, {np.abs(Symbol3_Output[p0]):.2f}',
-			f'{p1}: {(180/np.pi)*np.angle(Symbol3_Output[p1]):.1f}, {np.abs(Symbol3_Output[p2]):.2f}',
-			f'{p2}: {(180/np.pi)*np.angle(Symbol3_Output[p2]):.1f}, {np.abs(Symbol3_Output[p2]):.2f}',
-			f'{p3}: {(180/np.pi)*np.angle(Symbol3_Output[p3]):.1f}, {np.abs(Symbol3_Output[p3]):.2f}'
-		])
+		plt.title(f'Symbol 3 Pilots\nAdj {s2_adj} samps')
+		for i in pilot_index:
+			plt.plot([0,Symbol3_Output[i].real],[0,Symbol3_Output[i].imag], color='grey')
+			plt.plot([0,Eq_Symbol3_Output[i].real],[0,Eq_Symbol3_Output[i].imag], color='red')
 		plt.subplot(244)
 		plt.xlim(-1.5,1.5)
 		plt.ylim(-1.5,1.5)
 		plt.grid('true')
-		plt.title(f'Symbol 4\nPilots')
-		plt.scatter(Symbol4_Output[p0].real, Symbol4_Output[p0].imag, s=8)
-		plt.scatter(Symbol4_Output[p1].real, Symbol4_Output[p1].imag, s=8)
-		plt.scatter(Symbol4_Output[p2].real, Symbol4_Output[p2].imag, s=8)
-		plt.scatter(Symbol4_Output[p3].real, Symbol4_Output[p3].imag, s=8)
-		plt.plot([0,Symbol4_Output[p0].real],[0,Symbol4_Output[p0].imag])
-		plt.plot([0,Symbol4_Output[p1].real],[0,Symbol4_Output[p1].imag])
-		plt.plot([0,Symbol4_Output[p2].real],[0,Symbol4_Output[p2].imag])
-		plt.plot([0,Symbol4_Output[p3].real],[0,Symbol4_Output[p3].imag])
-		plt.legend([
-			f'{p0}: {(180/np.pi)*np.angle(Symbol4_Output[p0]):.1f}, {np.abs(Symbol4_Output[p0]):.2f}',
-			f'{p1}: {(180/np.pi)*np.angle(Symbol4_Output[p1]):.1f}, {np.abs(Symbol4_Output[p2]):.2f}',
-			f'{p2}: {(180/np.pi)*np.angle(Symbol4_Output[p2]):.1f}, {np.abs(Symbol4_Output[p2]):.2f}',
-			f'{p3}: {(180/np.pi)*np.angle(Symbol4_Output[p3]):.1f}, {np.abs(Symbol4_Output[p3]):.2f}'
-		])
+		plt.title(f'Symbol 4 Pilots\nAdj {s3_adj} samps')
+		for i in pilot_index:
+			plt.plot([0,Symbol4_Output[i].real],[0,Symbol4_Output[i].imag], color='grey')
+			plt.plot([0,Eq_Symbol4_Output[i].real],[0,Eq_Symbol4_Output[i].imag], color='red')
 		plt.subplot(245)
 		plt.xlim(-1.5,1.5)
 		plt.ylim(-1.5,1.5)
 		plt.grid('true')
 		plt.title(f'Fine Ranging Symbol\nData Subcarriers')
-		plt.scatter(Symbol_Output[0:p0].real, Symbol_Output[0:p0].imag, s=2)
-		plt.scatter(Symbol_Output[p0+1:p1].real, Symbol_Output[p0+1:p1].imag, s=2)
-		plt.scatter(Symbol_Output[p1+1:p2].real, Symbol_Output[p1+1:p2].imag, s=2)
-		plt.scatter(Symbol_Output[p2+1:p3].real, Symbol_Output[p2+1:p3].imag, s=2)
-		plt.scatter(Symbol_Output[p3+1:].real, Symbol_Output[p3+1:].imag, s=2)
+		plt.scatter(Symbol_Output.real, Symbol_Output.imag, s=3, color='grey')
+		plt.scatter(Eq_Symbol_Output.real, Eq_Symbol_Output.imag, s=6, color='red')
 		plt.subplot(246)
 		plt.xlim(-1.5,1.5)
 		plt.ylim(-1.5,1.5)
 		plt.grid('true')
 		plt.title(f'Symbol 2\nData Subcarriers')
-		plt.scatter(Symbol2_Output[0:p0].real, Symbol2_Output[0:p0].imag, s=2)
-		plt.scatter(Symbol2_Output[p0+1:p1].real, Symbol2_Output[p0+1:p1].imag, s=2)
-		plt.scatter(Symbol2_Output[p1+1:p2].real, Symbol2_Output[p1+1:p2].imag, s=2)
-		plt.scatter(Symbol2_Output[p2+1:p3].real, Symbol2_Output[p2+1:p3].imag, s=2)
-		plt.scatter(Symbol2_Output[p3+1:].real, Symbol2_Output[p3+1:].imag, s=2)
+		plt.scatter(Symbol2_Output.real, Symbol2_Output.imag, s=3, color='grey')
+		plt.scatter(Eq_Symbol2_Output.real, Eq_Symbol2_Output.imag, s=6, color='red')
 		plt.subplot(247)
 		plt.xlim(-1.5,1.5)
 		plt.ylim(-1.5,1.5)
 		plt.grid('true')
 		plt.title(f'Symbol 3\nData Subcarriers')
-		plt.scatter(Symbol3_Output[0:p0].real, Symbol3_Output[0:p0].imag, s=2)
-		plt.scatter(Symbol3_Output[p0+1:p1].real, Symbol3_Output[p0+1:p1].imag, s=2)
-		plt.scatter(Symbol3_Output[p1+1:p2].real, Symbol3_Output[p1+1:p2].imag, s=2)
-		plt.scatter(Symbol3_Output[p2+1:p3].real, Symbol3_Output[p2+1:p3].imag, s=2)
-		plt.scatter(Symbol3_Output[p3+1:].real, Symbol3_Output[p3+1:].imag, s=2)
+		plt.scatter(Symbol3_Output.real, Symbol3_Output.imag, s=3, color='grey')
+		plt.scatter(Eq_Symbol3_Output.real, Eq_Symbol3_Output.imag, s=6, color='red')
 		plt.subplot(248)
 		plt.xlim(-1.5,1.5)
 		plt.ylim(-1.5,1.5)
 		plt.grid('true')
 		plt.title(f'Symbol 4\nData Subcarriers')
-		plt.scatter(Symbol4_Output[0:p0].real, Symbol3_Output[0:p0].imag, s=2)
-		plt.scatter(Symbol4_Output[p0+1:p1].real, Symbol4_Output[p0+1:p1].imag, s=2)
-		plt.scatter(Symbol4_Output[p1+1:p2].real, Symbol4_Output[p1+1:p2].imag, s=2)
-		plt.scatter(Symbol4_Output[p2+1:p3].real, Symbol4_Output[p2+1:p3].imag, s=2)
-		plt.scatter(Symbol4_Output[p3+1:].real, Symbol4_Output[p3+1:].imag, s=2)
+		plt.scatter(Symbol4_Output.real, Symbol4_Output.imag, s=3, color='grey')
+		plt.scatter(Eq_Symbol4_Output.real, Eq_Symbol4_Output.imag, s=6, color='red')
 		plt.show()
 
 if __name__ == "__main__":
