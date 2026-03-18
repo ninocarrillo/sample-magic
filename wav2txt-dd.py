@@ -11,14 +11,6 @@ from scipy.fft import fft, fftfreq
 from scipy.signal import firwin
 
 def SelectSubcarriers(symbol):
-	# sel_symbol = np.zeros(len(symbol), dtype='complex')
-	# j = 0
-	# for i in range(48,81):
-	# 	sel_symbol[j] = symbol[i]
-	# 	i += 1
-	# for i in range(17,48):
-	# 	sel_symbol[j] = symbol[i]
-	# 	i += 1
 	sel_symbol = symbol[48:81]
 	sel_symbol = np.concatenate([sel_symbol,symbol[17:48]])
 	return sel_symbol
@@ -189,34 +181,16 @@ def main():
 	carrier_freq -= 1500
 	print(f'Carrier Freq: {carrier_freq}')
 	for i in range(audio_sample_count):
-		time_var = 2 * np.pi * i * (carrier_freq) / audio_sample_rate
+		time_var = 2 * np.pi * i * (-carrier_freq) / audio_sample_rate
 		baseband_samples[i] = audio_samples[i] * np.exp((time_var + carrier_phase) * 1j)
 
-	
-	#baseband_samples = audio_samples * (1 + 0j)
-
 	baseband_sample_rate = audio_sample_rate
-
-	# Low-pass filter the complex baseband
-	#deci_fir = firwin(deci_fir_len, [500,2500], pass_zero='bandpass', fs=audio_sample_rate)
-	#baseband_samples = np.convolve(baseband_samples, deci_fir, mode='full')
-	
-	# Discard delayed samples
-	#baseband_samples = baseband_samples[int(((deci_fir_len - 1) / 2) - sample_offset):]
-	pre_deci_baseband_sample_count = len(baseband_samples)
-	
-	pre_deci_baseband_samples = baseband_samples.copy()
-	pre_deci_index = list(range(pre_deci_baseband_sample_count))
-	# plt.figure()
-	# plt.plot(pre_deci_index, pre_deci_baseband_samples.real, marker='o')
 
 	# Decimate baseband samples:
 	baseband_samples = baseband_samples[::decimation_rate]
 	baseband_sample_rate = baseband_sample_rate / decimation_rate
 
-	baseband_index = list(range(0,pre_deci_baseband_sample_count, decimation_rate))
-	# plt.plot(baseband_index, baseband_samples.real, marker='x')
-	# plt.show()
+	baseband_index = list(range(0,len(baseband_samples), decimation_rate))
 
 	# Perform FFT of final audio signal
 	audio_psd = AnalyzeSpectrum(audio_samples, audio_sample_rate, 0.99)
@@ -348,7 +322,7 @@ def main():
 	# Location of pilot subcarriers
 	pilot_index = [7,21,43,57]
 
-	fudge = 12
+	fudge = int(Oversample * 1.5)
 
 	CP_Length = 8 * Oversample
 	for SC_Peak_Sample in Sync_List:
@@ -358,17 +332,11 @@ def main():
 		# Collect and process the fine ranging symbol
 		Symbol_Baseband = baseband_samples[Start_i:Start_i + (Oversample * FFT_N):int(Oversample / 4)]
 		# Insert zeros to pad FFT
-		#Symbol_Baseband = PadBasebandZeros(Symbol_Baseband,4)
 		Symbol_Output = np.fft.fft(Symbol_Baseband, FFT_N * 4) / 4
-
-		plt.figure()
-		plt.plot(np.abs(Symbol_Output))
-		plt.show()
 
 		# Select the desired subcarriers
 		Symbol_Output = SelectSubcarriers(Symbol_Output)
 		
-
 		FRS_Error_Symbol, FRS_Phase_Error, FRS_Mag_Error = CalcSubcarrierError(Symbol_Output)
 
 		Corrected_Symbol = Symbol_Output * FRS_Error_Symbol.conj()
