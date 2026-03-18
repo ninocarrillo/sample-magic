@@ -186,6 +186,11 @@ def main():
 
 	baseband_sample_rate = audio_sample_rate
 
+
+	# Low-pass filter the complex baseband (might not be required)
+	deci_fir = firwin(deci_fir_len, [4000], pass_zero='lowpass', fs=audio_sample_rate)
+	baseband_samples = np.convolve(baseband_samples, deci_fir, mode='full')
+
 	# Decimate baseband samples:
 	baseband_samples = baseband_samples[::decimation_rate]
 	baseband_sample_rate = baseband_sample_rate / decimation_rate
@@ -330,9 +335,12 @@ def main():
 		Start_i = SC_Peak_Sample + SC_Offset
 
 		# Collect and process the fine ranging symbol
-		Symbol_Baseband = baseband_samples[Start_i:Start_i + (Oversample * FFT_N):int(Oversample / 4)]
+		Symbol_Baseband = baseband_samples[Start_i:Start_i + (Oversample * FFT_N):int(Oversample/4)]
+		print(f'Sample Count: {Oversample*FFT_N}')
+		print(f'Downsample: {Oversample/4}')
+		print(f'FFT N: {FFT_N * 4}')
 		# Insert zeros to pad FFT
-		Symbol_Output = np.fft.fft(Symbol_Baseband, FFT_N * 4) / 4
+		Symbol_Output = np.fft.fft(Symbol_Baseband, FFT_N * 4) * 0.25
 
 		# Select the desired subcarriers
 		Symbol_Output = SelectSubcarriers(Symbol_Output)
