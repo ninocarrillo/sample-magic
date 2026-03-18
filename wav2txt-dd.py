@@ -11,7 +11,17 @@ from scipy.fft import fft, fftfreq
 from scipy.signal import firwin
 
 def SelectSubcarriers(symbol):
-	return symbol[15:79]
+	# sel_symbol = np.zeros(len(symbol), dtype='complex')
+	# j = 0
+	# for i in range(48,81):
+	# 	sel_symbol[j] = symbol[i]
+	# 	i += 1
+	# for i in range(17,48):
+	# 	sel_symbol[j] = symbol[i]
+	# 	i += 1
+	sel_symbol = symbol[48:81]
+	sel_symbol = np.concatenate([sel_symbol,symbol[17:48]])
+	return sel_symbol
 
 def PadBasebandZeros(symbol, rate):
 	padded_symbol = np.zeros(len(symbol) * rate, dtype='complex')
