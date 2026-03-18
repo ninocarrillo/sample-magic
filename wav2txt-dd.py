@@ -11,7 +11,7 @@ from scipy.fft import fft, fftfreq
 from scipy.signal import firwin
 
 def SelectSubcarriers(symbol):
-	return symbol[144:208]
+	return symbol[15:79]
 
 def PadBasebandZeros(symbol, rate):
 	padded_symbol = np.zeros(len(symbol) * rate, dtype='complex')
@@ -182,6 +182,9 @@ def main():
 		time_var = 2 * np.pi * i * (carrier_freq) / audio_sample_rate
 		baseband_samples[i] = audio_samples[i] * np.exp((time_var + carrier_phase) * 1j)
 
+	
+	#baseband_samples = audio_samples * (1 + 0j)
+
 	baseband_sample_rate = audio_sample_rate
 
 	# Low-pass filter the complex baseband
@@ -335,8 +338,7 @@ def main():
 	# Location of pilot subcarriers
 	pilot_index = [7,21,43,57]
 
-	fudge = 0
-	fudge = int(1.5*Oversample)
+	fudge = 12
 
 	CP_Length = 8 * Oversample
 	for SC_Peak_Sample in Sync_List:
@@ -344,13 +346,16 @@ def main():
 		Start_i = SC_Peak_Sample + SC_Offset
 
 		# Collect and process the fine ranging symbol
-		Symbol_Baseband = baseband_samples[Start_i:Start_i + (Oversample * FFT_N):Oversample]
+		Symbol_Baseband = baseband_samples[Start_i:Start_i + (Oversample * FFT_N):int(Oversample / 4)]
 		# Insert zeros to pad FFT
-		Symbol_Baseband = PadBasebandZeros(Symbol_Baseband,4)
-		Symbol_Output = np.fft.fft(Symbol_Baseband, FFT_N * 4)
+		#Symbol_Baseband = PadBasebandZeros(Symbol_Baseband,4)
+		Symbol_Output = np.fft.fft(Symbol_Baseband, FFT_N * 4) / 4
+
+		plt.figure()
+		plt.plot(np.abs(Symbol_Output))
+		plt.show()
+
 		# Select the desired subcarriers
-		
-		
 		Symbol_Output = SelectSubcarriers(Symbol_Output)
 		
 
@@ -387,15 +392,15 @@ def main():
 		Eq_Symbol_Output = Symbol_Output * FRS_Error_Symbol.conj()
 		CalcPilotError(Eq_Symbol_Output, baseband_sample_rate, Oversample)
 
-		Symbol2_Baseband = baseband_samples[Start_i+(Oversample * (FFT_N+8)):(Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):Oversample]
-		Symbol2_Output = np.fft.fft(Symbol2_Baseband, FFT_N*4)
+		Symbol2_Baseband = baseband_samples[Start_i+(Oversample * (FFT_N+8)):(Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):int(Oversample / 4)]
+		Symbol2_Output = np.fft.fft(Symbol2_Baseband, FFT_N*4)/4
 		Symbol2_Output = SelectSubcarriers(Symbol2_Output)
 		Eq_Symbol2_Output = Symbol2_Output * FRS_Error_Symbol.conj()
 		sample_error, fine_phase_error = CalcPilotError(Eq_Symbol2_Output, baseband_sample_rate, Oversample)
 
 		
-		Symbol3_Baseband = baseband_samples[Start_i+(2*Oversample * (FFT_N+8)):(2*Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):Oversample]
-		Symbol3_Output = np.fft.fft(Symbol3_Baseband, FFT_N*4)
+		Symbol3_Baseband = baseband_samples[Start_i+(2*Oversample * (FFT_N+8)):(2*Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):int(Oversample / 4)]
+		Symbol3_Output = np.fft.fft(Symbol3_Baseband, FFT_N*4)/4
 		Symbol3_Output = SelectSubcarriers(Symbol3_Output)
 		Eq_Symbol3_Output = Symbol3_Output * FRS_Error_Symbol.conj()
 		#FRS_Error_Symbol = np.multiply(FRS_Error_Symbol, fine_phase_error)
@@ -404,8 +409,8 @@ def main():
 		sample_error, fine_phase_error = CalcPilotError(Eq_Symbol3_Output, baseband_sample_rate, Oversample)
 
 		
-		Symbol4_Baseband = baseband_samples[Start_i+(3*Oversample * (FFT_N+8)):(3*Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):Oversample]
-		Symbol4_Output = np.fft.fft(Symbol4_Baseband, FFT_N*4)
+		Symbol4_Baseband = baseband_samples[Start_i+(3*Oversample * (FFT_N+8)):(3*Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):int(Oversample / 4)]
+		Symbol4_Output = np.fft.fft(Symbol4_Baseband, FFT_N*4)/4
 		Symbol4_Output = SelectSubcarriers(Symbol4_Output)
 		Eq_Symbol4_Output = Symbol4_Output * FRS_Error_Symbol.conj()
 		#FRS_Error_Symbol = np.multiply(FRS_Error_Symbol, fine_phase_error)
