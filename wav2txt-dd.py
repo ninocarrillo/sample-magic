@@ -355,29 +355,29 @@ def main():
 			
 			FRS_Error_Symbol = CalcSubcarrierError(Symbol_Output)
 
-			FRS_Error_Symbol = SmoothSymbol(FRS_Error_Symbol, freq)
+			Smooth_FRS_Error_Symbol = SmoothSymbol(FRS_Error_Symbol, freq)
 
-			Corrected_Symbol = Symbol_Output * FRS_Error_Symbol.conj()
+			Corrected_Symbol = Symbol_Output * Smooth_FRS_Error_Symbol.conj()
 
 			Corrected_Error_Symbol = CalcSubcarrierError(Corrected_Symbol)
 			
 
 
 
-			Eq_Symbol_Output = Symbol_Output * FRS_Error_Symbol.conj()
+			Eq_Symbol_Output = Symbol_Output * Smooth_FRS_Error_Symbol.conj()
 			CalcPilotError(Eq_Symbol_Output, baseband_sample_rate, Oversample)
 
 			Symbol2_Baseband = baseband_samples[Start_i+(Oversample * (FFT_N+8)):(Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):int(Oversample / 4)]
 			Symbol2_Output = np.fft.fft(Symbol2_Baseband, FFT_N*4)/4
 			Symbol2_Output = SelectSubcarriers(Symbol2_Output)
-			Eq_Symbol2_Output = Symbol2_Output * FRS_Error_Symbol.conj()
+			Eq_Symbol2_Output = Symbol2_Output * Smooth_FRS_Error_Symbol.conj()
 			sample_error, fine_phase_error = CalcPilotError(Eq_Symbol2_Output, baseband_sample_rate, Oversample)
 
 			
 			Symbol3_Baseband = baseband_samples[Start_i+(2*Oversample * (FFT_N+8)):(2*Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):int(Oversample / 4)]
 			Symbol3_Output = np.fft.fft(Symbol3_Baseband, FFT_N*4)/4
 			Symbol3_Output = SelectSubcarriers(Symbol3_Output)
-			Eq_Symbol3_Output = Symbol3_Output * FRS_Error_Symbol.conj()
+			Eq_Symbol3_Output = Symbol3_Output * Smooth_FRS_Error_Symbol.conj()
 			#FRS_Error_Symbol = np.multiply(FRS_Error_Symbol, fine_phase_error)
 			Eq_Eq_Symbol3_Output = Eq_Symbol3_Output * fine_phase_error.conj()
 			#Eq_Eq_Symbol3_Output = Symbol3_Output * FRS_Error_Symbol.conj()
@@ -387,7 +387,7 @@ def main():
 			Symbol4_Baseband = baseband_samples[Start_i+(3*Oversample * (FFT_N+8)):(3*Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):int(Oversample / 4)]
 			Symbol4_Output = np.fft.fft(Symbol4_Baseband, FFT_N*4)/4
 			Symbol4_Output = SelectSubcarriers(Symbol4_Output)
-			Eq_Symbol4_Output = Symbol4_Output * FRS_Error_Symbol.conj()
+			Eq_Symbol4_Output = Symbol4_Output * Smooth_FRS_Error_Symbol.conj()
 			#FRS_Error_Symbol = np.multiply(FRS_Error_Symbol, fine_phase_error)
 			Eq_Eq_Symbol4_Output = Eq_Symbol4_Output * fine_phase_error.conj()
 			#Eq_Eq_Symbol4_Output = Symbol4_Output * FRS_Error_Symbol.conj()
@@ -405,7 +405,7 @@ def main():
 			print(f'Fine Ranging Symbol Average Phase Error: {np.angle(AvgSubcarriers(FRS_Error_Symbol, Subcarrier_List), deg=True):.1f}')
 			
 			fig,ax = plt.subplots(2,3, figsize=(12,8))
-			plt.suptitle(f'Start Index {Start_i}, Oversample {Oversample}, LO Phase Error {np.angle(AvgSubcarriers(FRS_Error_Symbol, Subcarrier_List), deg=True):.1f} deg\nfudge offset {fudge_offset}')
+			plt.suptitle(f'Start Index {Start_i}, Oversample {Oversample}, LO Phase Error {np.angle(AvgSubcarriers(FRS_Error_Symbol, Subcarrier_List), deg=True):.1f} deg')
 			fig.tight_layout()
 			plt.subplot(232)
 			plt.xlim(-1.5,1.5)
@@ -463,7 +463,8 @@ def main():
 			plt.grid(True)
 			plt.scatter(freq,1-np.abs(FRS_Error_Symbol),s=2)
 			plt.scatter(freq,1-np.abs(Corrected_Error_Symbol),s=2)
-			plt.legend(['Unequalized', 'Equalized'])
+			plt.scatter(freq,1-np.abs(Smooth_FRS_Error_Symbol),s=2, color='red')
+			plt.legend(['Unequalized', 'Equalized', 'Smoothed'])
 			plt.show()
 
 if __name__ == "__main__":
