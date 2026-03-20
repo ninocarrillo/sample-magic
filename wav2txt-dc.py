@@ -10,6 +10,16 @@ import matplotlib.pyplot as plt
 from scipy.fft import fft, fftfreq
 from scipy.signal import firwin
 
+def SelectSubcarriers(symbol):
+	sel_symbol = symbol[48:81]
+	sel_symbol = np.concatenate([sel_symbol,symbol[17:48]])
+	return sel_symbol
+
+def PadBasebandZeros(symbol, rate):
+	padded_symbol = np.zeros(len(symbol) * rate, dtype='complex')
+	for i in range(len(symbol)):
+		padded_symbol[i] = symbol[i]
+	return padded_symbol
 
 def CalcSubcarrierError(symbol):
 	FRS_Phase = [135,-90,45,135,-45,45,-45,0,-45,135,-45,45,135,-135,45,-45,135,-45,-45,135,-135,0,-45,-45,-135,-135,-45,-45,-135,45,-135,45,135,135,-135,135,-135,45,-45,-45,135,-45,45,0,-135,-135,135,135,-45,45,45,-45,-135,-135,45,-45,45,-180,-45,-135,-135,45,-135,-135]
@@ -143,14 +153,12 @@ def main():
 		print("Python version should be 3.x, exiting")
 		sys.exit(1)
 	# check correct number of parameters were passed to command line
-	if len(sys.argv) != 7:
-		print("Incorrect arg count. Usage: python3 wav2txt.py <input wav file> <decimation rate> <deci fir len> <sample offset> <carrier freq> <output txt file>")
+	if len(sys.argv) != 5:
+		print("Incorrect arg count. Usage: python3 wav2txt.py <input wav file> <decimation rate> <carrier freq> <output txt file>")
 		sys.exit(2)
 
 	decimation_rate = int(sys.argv[2])
-	deci_fir_len = int(sys.argv[3])
-	sample_offset = int(sys.argv[4])
-	carrier_freq = float(sys.argv[5])
+	carrier_freq = float(sys.argv[3])
 
 	try:
 		audio_sample_rate, audio_samples  = readwav(sys.argv[1])
@@ -165,78 +173,41 @@ def main():
 
 	audio_sample_count = len(audio_samples)
 
-	# Mix audio with complex carrier freq to move spectrum to baseband
+	# Mix audio with complex baseband carrier to correct LO freq only
 	baseband_samples = np.zeros(audio_sample_count, dtype=complex)
 	carrier_phase = 0
+	print(f'Carrier Freq: {carrier_freq}')
 	for i in range(audio_sample_count):
 		time_var = 2 * np.pi * i * (-carrier_freq) / audio_sample_rate
 		baseband_samples[i] = audio_samples[i] * np.exp((time_var + carrier_phase) * 1j)
 
 	baseband_sample_rate = audio_sample_rate
 
+
 	# Low-pass filter the complex baseband
+	deci_fir_len = 1023
 	deci_fir = firwin(deci_fir_len, [1500], pass_zero='lowpass', fs=audio_sample_rate)
 	baseband_samples = np.convolve(baseband_samples, deci_fir, mode='full')
-	
-	# Discard delayed samples
-	baseband_samples = baseband_samples[int(((deci_fir_len - 1) / 2) - sample_offset):]
-	pre_deci_baseband_sample_count = len(baseband_samples)
-	
-	pre_deci_baseband_samples = baseband_samples.copy()
-	pre_deci_index = list(range(pre_deci_baseband_sample_count))
-	# plt.figure()
-	# plt.plot(pre_deci_index, pre_deci_baseband_samples.real, marker='o')
 
 	# Decimate baseband samples:
 	baseband_samples = baseband_samples[::decimation_rate]
 	baseband_sample_rate = baseband_sample_rate / decimation_rate
+	print(f'Baseband sample rate: {baseband_sample_rate}')
+	print(f'Decimation rate: {decimation_rate}')
 
-	baseband_index = list(range(0,pre_deci_baseband_sample_count, decimation_rate))
-	# plt.plot(baseband_index, baseband_samples.real, marker='x')
-	# plt.show()
+	baseband_index = list(range(0,len(baseband_samples), decimation_rate))
 
 	# Perform FFT of final audio signal
 	audio_psd = AnalyzeSpectrum(audio_samples, audio_sample_rate, 0.99)
 	baseband_psd = AnalyzeSpectrum(baseband_samples, baseband_sample_rate, 0.99)
 
-	fig, ax = plt.subplots(2,3)
-	fig.tight_layout()
-	plt.subplot(235)
-	plt.plot(baseband_samples.real, baseband_samples.imag, '.', ms=2)
-	plt.title('Baseband Samples')
-	plt.xlabel('in-phase')
-	plt.ylabel('quadrature')
-	plt.xlim(-0.5,0.5)
-	plt.ylim(-0.5,0.5)
-	plt.grid(True)
-	plt.subplot(234)
-	plt.plot(baseband_psd[0], baseband_psd[1], '.', ms=2)
-	plt.xlim(-baseband_sample_rate, baseband_sample_rate)
-	plt.ylim(-60,10)
-	plt.ylabel("dBFS")
-	plt.xlabel("Frequency, Hz")
-	plt.title("Baseband Spectrum")
-	plt.grid(True)
-	plt.subplot(231)
-	plt.plot(audio_samples, linewidth=1)
-	plt.title("Audio Samples")
-	plt.ylim(-0.5,0.5)
-	plt.subplot(232)
-	plt.plot(audio_psd[0], audio_psd[1], '.', ms=2)
-	plt.xlim(0, 3000)
-	plt.ylim(-100,10)
-	plt.ylabel("dBFS")
-	plt.xlabel("Frequency, Hz")
-	plt.title("Audio spectrum")
-	plt.grid(True)
-	plt.show()
 
 	try:
-		with open(sys.argv[6], 'w', encoding='utf-8') as output_file:
+		with open(sys.argv[4], 'w', encoding='utf-8') as output_file:
 			for complex_sample_pair in baseband_samples:
 				print(f'{complex_sample_pair.real:.6f} {complex_sample_pair.imag:.6f}', file=output_file)
 	except:
-		printf(f'Unable to create output file {sys.argv[6]}')
+		printf(f'Unable to create output file {sys.argv[4]}')
 
 	# Attempt Schmidl-Cox conjugate correlation
 	FFT_N = 64
@@ -303,13 +274,44 @@ def main():
 	print('Coarse timing trigger samples:')
 	print(Sync_List)
 
-	plt.figure()
+
+	fig, ax = plt.subplots(2,3, figsize=(12,8))
+	fig.tight_layout()
+	plt.subplot(234)
+	plt.plot(baseband_samples.real, baseband_samples.imag, '.', ms=2)
+	plt.title('Baseband Samples')
+	plt.xlabel('in-phase')
+	plt.ylabel('quadrature')
+	plt.xlim(-0.5,0.5)
+	plt.ylim(-0.5,0.5)
+	plt.grid(True)
+	plt.subplot(235)
+	plt.plot(baseband_psd[0], baseband_psd[1], '.', ms=2)
+	plt.xlim(-baseband_sample_rate, baseband_sample_rate)
+	plt.ylim(-60,10)
+	plt.ylabel("dBFS")
+	plt.xlabel("Frequency, Hz")
+	plt.title("Baseband Spectrum")
+	plt.grid(True)
+	plt.subplot(231)
+	plt.plot(audio_samples, linewidth=1)
+	plt.title("Audio Samples")
+	plt.ylim(-0.5,0.5)
+	plt.subplot(232)
+	plt.plot(audio_psd[0], audio_psd[1], '.', ms=2)
+	plt.xlim(0, 3000)
+	plt.ylim(-100,10)
+	plt.ylabel("dBFS")
+	plt.xlabel("Frequency, Hz")
+	plt.title("Audio spectrum")
+	plt.grid(True)
+
+	plt.subplot(236)
 	plt.title('Derivative of Moving Average of P1')
 	plt.plot(P1_Derivative)
 	plt.grid('true')
-	plt.show()
 
-	plt.figure()
+	plt.subplot(233)
 	plt.plot(np.abs(baseband_samples))
 	plt.plot(P1.real)
 	plt.plot(P1_MA.real)
@@ -324,151 +326,131 @@ def main():
 	
 	# Location of pilot subcarriers
 	pilot_index = [7,21,43,57]
-
 	CP_Length = 8 * Oversample
-	for SC_Peak_Sample in Sync_List:
-		SC_Offset = (2 * L) + CP_Length + int(1.5 * Oversample)
-		Start_i = SC_Peak_Sample + SC_Offset
 
-		# Collect and process the fine ranging symbol
-		Symbol_Baseband = baseband_samples[Start_i:Start_i + (Oversample * FFT_N):Oversample]
-		Symbol_Output = np.fft.fft(Symbol_Baseband, FFT_N)
+	for fudge_offset in range(0,2*CP_Length):
 
-		FRS_Error_Symbol, FRS_Phase_Error, FRS_Mag_Error = CalcSubcarrierError(Symbol_Output)
+		fudge = fudge_offset
 
-		Corrected_Symbol = Symbol_Output * FRS_Error_Symbol.conj()
+		for SC_Peak_Sample in Sync_List:
+			SC_Offset = (2 * L) + fudge
+			Start_i = SC_Peak_Sample + SC_Offset
 
-		Corrected_Error_Symbol, Corrected_Phase_Error, Corrected_Mag_Error = CalcSubcarrierError(Corrected_Symbol)
+			# Collect and process the fine ranging symbol
+			Symbol_Baseband = baseband_samples[Start_i:Start_i + (Oversample * FFT_N):int(Oversample)]
+			Symbol_Output = np.fft.fft(Symbol_Baseband, FFT_N)
 
-		freq = np.fft.fftfreq(64, 1/2000)
-
-
-		# plot Fine Ranging Symbol phase and magnitude erros
-		fig,ax = plt.subplots(2,1)
-		plt.suptitle("Fine Ranging Symbol Analysis")
-		plt.subplot(211)
-		plt.title("Phase Angle Error, Degrees")
-		plt.grid(True)
-		plt.yticks([-180,-134,-90,-45,0,45,90,135,180])
-		plt.ylim(-200,200)
-		plt.scatter(freq,FRS_Phase_Error,s=2)
-		plt.scatter(freq,Corrected_Phase_Error,s=2)
-		plt.legend(['Unequalized', 'Equalized'])
-		plt.subplot(212)
-		plt.title("Magnitude Error")
-		plt.grid(True)
-		plt.ylim(-1.5,1.5)
-
-		plt.scatter(freq,FRS_Mag_Error,s=2)
-		plt.scatter(freq,Corrected_Mag_Error,s=2)
-		plt.legend(['Unequalized', 'Equalized'])
-		plt.show()
-
-		Eq_Symbol_Output = Symbol_Output * FRS_Error_Symbol.conj()
-		CalcPilotError(Eq_Symbol_Output, baseband_sample_rate, Oversample)
-
-		Symbol2_Baseband = baseband_samples[Start_i+(Oversample * (FFT_N+8)):(Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):Oversample]
-		Symbol2_Output = np.fft.fft(Symbol2_Baseband, FFT_N)
-		Eq_Symbol2_Output = Symbol2_Output * FRS_Error_Symbol.conj()
-		sample_error, fine_phase_error = CalcPilotError(Eq_Symbol2_Output, baseband_sample_rate, Oversample)
-
-		
-		Symbol3_Baseband = baseband_samples[Start_i+(2*Oversample * (FFT_N+8)):(2*Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):Oversample]
-		Symbol3_Output = np.fft.fft(Symbol3_Baseband, FFT_N)
-		Eq_Symbol3_Output = Symbol3_Output * FRS_Error_Symbol.conj()
-		#FRS_Error_Symbol = np.multiply(FRS_Error_Symbol, fine_phase_error)
-		Eq_Eq_Symbol3_Output = Eq_Symbol3_Output * fine_phase_error.conj()
-		#Eq_Eq_Symbol3_Output = Symbol3_Output * FRS_Error_Symbol.conj()
-		sample_error, fine_phase_error = CalcPilotError(Eq_Symbol3_Output, baseband_sample_rate, Oversample)
-
-		
-		Symbol4_Baseband = baseband_samples[Start_i+(3*Oversample * (FFT_N+8)):(3*Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):Oversample]
-		Symbol4_Output = np.fft.fft(Symbol4_Baseband, FFT_N)
-		Eq_Symbol4_Output = Symbol4_Output * FRS_Error_Symbol.conj()
-		#FRS_Error_Symbol = np.multiply(FRS_Error_Symbol, fine_phase_error)
-		Eq_Eq_Symbol4_Output = Eq_Symbol4_Output * fine_phase_error.conj()
-		#Eq_Eq_Symbol4_Output = Symbol4_Output * FRS_Error_Symbol.conj()
-		
-		Subcarrier_List = []
-		j = 0
-		for i in range(FFT_N):
-			if i != 0:
-				if i != 1:
-					if i != 32:
-						Subcarrier_List.append(i)
-						
-		print(f'Subcarrier list is {len(Subcarrier_List)} elements long.')
 			
-		print(f'Fine Ranging Symbol Average Phase Error: {np.angle(AvgSubcarriers(FRS_Error_Symbol, Subcarrier_List), deg=True):.1f}')
-		
-		fig,ax = plt.subplots(2,4)
-		plt.suptitle(f'Start Index {Start_i}, Oversample {Oversample}, LO Phase Error {np.angle(AvgSubcarriers(FRS_Error_Symbol, Subcarrier_List), deg=True):.1f} deg\nUnequalized in grey, equalized in red')
-		fig.tight_layout()
-		plt.subplot(241)
-		plt.xlim(-1.5,1.5)
-		plt.ylim(-1.5,1.5)
-		plt.grid('true')
-		plt.title(f'Fine Ranging Symbol\nPilots')
-		for i in pilot_index:
-			plt.plot([0,Symbol_Output[i].real],[0,Symbol_Output[i].imag], color='grey')
-			plt.plot([0,Eq_Symbol_Output[i].real],[0,Eq_Symbol_Output[i].imag], color='red')
-		plt.subplot(242)
-		plt.xlim(-1.5,1.5)
-		plt.ylim(-1.5,1.5)
-		plt.grid('true')
-		plt.title(f'Symbol 2 Pilots')
-		for i in pilot_index:
-			plt.plot([0,Symbol2_Output[i].real],[0,Symbol2_Output[i].imag], color='grey')
-			plt.plot([0,Eq_Symbol2_Output[i].real],[0,Eq_Symbol2_Output[i].imag], color='red')
-		plt.subplot(243)
-		plt.xlim(-1.5,1.5)
-		plt.ylim(-1.5,1.5)
-		plt.grid('true')
-		plt.title(f'Symbol 3 Pilots')
-		for i in pilot_index:
-			plt.plot([0,Symbol3_Output[i].real],[0,Symbol3_Output[i].imag], color='grey')
-			plt.plot([0,Eq_Symbol3_Output[i].real],[0,Eq_Symbol3_Output[i].imag], color='red')
-			plt.plot([0,Eq_Eq_Symbol3_Output[i].real],[0,Eq_Eq_Symbol3_Output[i].imag], color='blue')
-		plt.subplot(244)
-		plt.xlim(-1.5,1.5)
-		plt.ylim(-1.5,1.5)
-		plt.grid('true')
-		plt.title(f'Symbol 4 Pilots')
-		for i in pilot_index:
-			plt.plot([0,Symbol4_Output[i].real],[0,Symbol4_Output[i].imag], color='grey')
-			plt.plot([0,Eq_Symbol4_Output[i].real],[0,Eq_Symbol4_Output[i].imag], color='red')
-			plt.plot([0,Eq_Eq_Symbol4_Output[i].real],[0,Eq_Eq_Symbol4_Output[i].imag], color='blue')
-		plt.subplot(245)
-		plt.xlim(-1.5,1.5)
-		plt.ylim(-1.5,1.5)
-		plt.grid('true')
-		plt.title(f'Fine Ranging Symbol\nData Subcarriers')
-		plt.scatter(Symbol_Output.real, Symbol_Output.imag, s=6, color='grey')
-		plt.scatter(Eq_Symbol_Output.real, Eq_Symbol_Output.imag, s=5, color='red')
-		plt.subplot(246)
-		plt.xlim(-1.5,1.5)
-		plt.ylim(-1.5,1.5)
-		plt.grid('true')
-		plt.title(f'Symbol 2\nData Subcarriers')
-		plt.scatter(Symbol2_Output.real, Symbol2_Output.imag, s=6, color='grey')
-		plt.scatter(Eq_Symbol2_Output.real, Eq_Symbol2_Output.imag, s=5, color='red')
-		plt.subplot(247)
-		plt.xlim(-1.5,1.5)
-		plt.ylim(-1.5,1.5)
-		plt.grid('true')
-		plt.title(f'Symbol 3\nData Subcarriers')
-		plt.scatter(Symbol3_Output.real, Symbol3_Output.imag, s=6, color='grey')
-		plt.scatter(Eq_Symbol3_Output.real, Eq_Symbol3_Output.imag, s=5, color='red')
-		plt.scatter(Eq_Eq_Symbol3_Output.real, Eq_Eq_Symbol3_Output.imag, s=4, color='blue')
-		plt.subplot(248)
-		plt.xlim(-1.5,1.5)
-		plt.ylim(-1.5,1.5)
-		plt.grid('true')
-		plt.title(f'Symbol 4\nData Subcarriers')
-		plt.scatter(Symbol4_Output.real, Symbol4_Output.imag, s=6, color='grey')
-		plt.scatter(Eq_Symbol4_Output.real, Eq_Symbol4_Output.imag, s=5, color='red')
-		plt.scatter(Eq_Eq_Symbol4_Output.real, Eq_Eq_Symbol4_Output.imag, s=4, color='blue')
-		plt.show()
+			FRS_Error_Symbol, FRS_Phase_Error, FRS_Mag_Error = CalcSubcarrierError(Symbol_Output)
+
+			Corrected_Symbol = Symbol_Output * FRS_Error_Symbol.conj()
+
+			Corrected_Error_Symbol, Corrected_Phase_Error, Corrected_Mag_Error = CalcSubcarrierError(Corrected_Symbol)
+			
+
+			freq = np.fft.fftfreq(64, 1/2000)
+
+
+			Eq_Symbol_Output = Symbol_Output * FRS_Error_Symbol.conj()
+			CalcPilotError(Eq_Symbol_Output, baseband_sample_rate, Oversample)
+
+			Symbol2_Baseband = baseband_samples[Start_i+(Oversample * (FFT_N+8)):(Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):int(Oversample)]
+			Symbol2_Output = np.fft.fft(Symbol2_Baseband, FFT_N)
+			Eq_Symbol2_Output = Symbol2_Output * FRS_Error_Symbol.conj()
+			sample_error, fine_phase_error = CalcPilotError(Eq_Symbol2_Output, baseband_sample_rate, Oversample)
+
+			
+			Symbol3_Baseband = baseband_samples[Start_i+(2*Oversample * (FFT_N+8)):(2*Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):int(Oversample)]
+			Symbol3_Output = np.fft.fft(Symbol3_Baseband, FFT_N)
+			Eq_Symbol3_Output = Symbol3_Output * FRS_Error_Symbol.conj()
+			#FRS_Error_Symbol = np.multiply(FRS_Error_Symbol, fine_phase_error)
+			Eq_Eq_Symbol3_Output = Eq_Symbol3_Output * fine_phase_error.conj()
+			#Eq_Eq_Symbol3_Output = Symbol3_Output * FRS_Error_Symbol.conj()
+			sample_error, fine_phase_error = CalcPilotError(Eq_Symbol3_Output, baseband_sample_rate, Oversample)
+
+			
+			Symbol4_Baseband = baseband_samples[Start_i+(3*Oversample * (FFT_N+8)):(3*Oversample*(FFT_N+8))+Start_i + (Oversample * FFT_N):int(Oversample)]
+			Symbol4_Output = np.fft.fft(Symbol4_Baseband, FFT_N)
+			Eq_Symbol4_Output = Symbol4_Output * FRS_Error_Symbol.conj()
+			#FRS_Error_Symbol = np.multiply(FRS_Error_Symbol, fine_phase_error)
+			Eq_Eq_Symbol4_Output = Eq_Symbol4_Output * fine_phase_error.conj()
+			#Eq_Eq_Symbol4_Output = Symbol4_Output * FRS_Error_Symbol.conj()
+			
+			Subcarrier_List = []
+			j = 0
+			for i in range(FFT_N):
+				if i != 0:
+					if i != 1:
+						if i != 32:
+							Subcarrier_List.append(i)
+							
+			print(f'Subcarrier list is {len(Subcarrier_List)} elements long.')
+				
+			print(f'Fine Ranging Symbol Average Phase Error: {np.angle(AvgSubcarriers(FRS_Error_Symbol, Subcarrier_List), deg=True):.1f}')
+			
+			fig,ax = plt.subplots(2,3, figsize=(12,8))
+			plt.suptitle(f'Start Index {Start_i}, Oversample {Oversample}, LO Phase Error {np.angle(AvgSubcarriers(FRS_Error_Symbol, Subcarrier_List), deg=True):.1f} deg\nfudge offset {fudge_offset}')
+			fig.tight_layout()
+			plt.subplot(232)
+			plt.xlim(-1.5,1.5)
+			plt.ylim(-1.5,1.5)
+			plt.grid('true')
+			plt.title(f'Fine Ranging Symbol')
+			for i in pilot_index:
+				plt.plot([0,Symbol_Output[i].real],[0,Symbol_Output[i].imag], color='grey')
+				plt.plot([0,Eq_Symbol_Output[i].real],[0,Eq_Symbol_Output[i].imag], color='red')
+			plt.scatter(Symbol_Output.real, Symbol_Output.imag, s=6, color='grey')
+			plt.scatter(Eq_Symbol_Output.real, Eq_Symbol_Output.imag, s=5, color='red')
+			plt.subplot(233)
+			plt.xlim(-1.5,1.5)
+			plt.ylim(-1.5,1.5)
+			plt.grid('true')
+			plt.title(f'Symbol 2')
+			for i in pilot_index:
+				plt.plot([0,Symbol2_Output[i].real],[0,Symbol2_Output[i].imag], color='grey')
+				plt.plot([0,Eq_Symbol2_Output[i].real],[0,Eq_Symbol2_Output[i].imag], color='red')
+			plt.scatter(Symbol2_Output.real, Symbol2_Output.imag, s=6, color='grey')
+			plt.scatter(Eq_Symbol2_Output.real, Eq_Symbol2_Output.imag, s=5, color='red')
+			plt.subplot(235)
+			plt.xlim(-1.5,1.5)
+			plt.ylim(-1.5,1.5)
+			plt.grid('true')
+			plt.title(f'Symbol 3')
+			for i in pilot_index:
+				plt.plot([0,Symbol3_Output[i].real],[0,Symbol3_Output[i].imag], color='grey')
+				plt.plot([0,Eq_Symbol3_Output[i].real],[0,Eq_Symbol3_Output[i].imag], color='red')
+				plt.plot([0,Eq_Eq_Symbol3_Output[i].real],[0,Eq_Eq_Symbol3_Output[i].imag], color='blue')
+			plt.scatter(Symbol3_Output.real, Symbol3_Output.imag, s=6, color='grey')
+			plt.scatter(Eq_Symbol3_Output.real, Eq_Symbol3_Output.imag, s=5, color='red')
+			plt.scatter(Eq_Eq_Symbol3_Output.real, Eq_Eq_Symbol3_Output.imag, s=4, color='blue')
+			plt.subplot(236)
+			plt.xlim(-1.5,1.5)
+			plt.ylim(-1.5,1.5)
+			plt.grid('true')
+			plt.title(f'Symbol 4')
+			for i in pilot_index:
+				plt.plot([0,Symbol4_Output[i].real],[0,Symbol4_Output[i].imag], color='grey')
+				plt.plot([0,Eq_Symbol4_Output[i].real],[0,Eq_Symbol4_Output[i].imag], color='red')
+				plt.plot([0,Eq_Eq_Symbol4_Output[i].real],[0,Eq_Eq_Symbol4_Output[i].imag], color='blue')
+			plt.scatter(Symbol4_Output.real, Symbol4_Output.imag, s=6, color='grey')
+			plt.scatter(Eq_Symbol4_Output.real, Eq_Symbol4_Output.imag, s=5, color='red')
+			plt.scatter(Eq_Eq_Symbol4_Output.real, Eq_Eq_Symbol4_Output.imag, s=4, color='blue')
+			plt.subplot(234)
+			plt.title("Phase Angle Error, Degrees")
+			plt.grid(True)
+			plt.yticks([-180,-134,-90,-45,0,45,90,135,180])
+			plt.ylim(-200,200)
+			plt.scatter(freq,FRS_Phase_Error,s=2)
+			plt.scatter(freq,Corrected_Phase_Error,s=2)
+			plt.legend(['Unequalized', 'Equalized'])
+			plt.subplot(231)
+			plt.title("Magnitude Error")
+			plt.grid(True)
+			plt.ylim(-1.5,1.5)
+			plt.scatter(freq,FRS_Mag_Error,s=2)
+			plt.scatter(freq,Corrected_Mag_Error,s=2)
+			plt.legend(['Unequalized', 'Equalized'])
+			plt.show()
 
 if __name__ == "__main__":
 	main()
