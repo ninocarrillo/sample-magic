@@ -9,6 +9,18 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.fft import fft, fftfreq
 from scipy.signal import firwin
+from scipy.signal import savgol_filter
+
+def SmoothSymbol(symbol, freq):
+	paired = zip(freq,symbol)
+	sorted_paired = sorted(paired)
+	sorted_freq,sorted_symbol = zip(*sorted_paired)
+	smooth_symbol = savgol_filter(np.abs(sorted_symbol),window_length=17, polyorder = 3) * np.exp(np.multiply(1j,np.angle(sorted_symbol)))
+	final_symbol = np.zeros(len(smooth_symbol), dtype='complex')
+	for i in range(len(smooth_symbol)):
+		final_symbol[i] = smooth_symbol[np.where(sorted_freq == freq[i])]
+
+	return final_symbol
 
 def SelectSubcarriers(symbol):
 	sel_symbol = symbol[48:81]
@@ -26,13 +38,11 @@ def CalcSubcarrierError(symbol):
 	FRS_Symbol = np.exp(np.multiply(1j*np.pi/180,FRS_Phase))
 	Error_Vector = FRS_Symbol.conj() * symbol
 	Error_Vector = Error_Vector * (1/np.power(np.abs(Error_Vector),2))
-	Phase_Error = np.angle(Error_Vector) * 180 / np.pi
-	Mag_Error = np.abs(symbol) - np.abs(FRS_Symbol)
 	# Remove data for empty subcarriers
-	Error_Vector[0] = 0
-	Error_Vector[1] = 0
-	Error_Vector[32] = 0
-	return Error_Vector, Phase_Error, Mag_Error
+	Error_Vector[0] = Error_Vector[2]
+	Error_Vector[1] = Error_Vector[2]
+	Error_Vector[32] = Error_Vector[33]
+	return Error_Vector
 	
 def CalcPilotError(symbol, bb_fs, oversample):
 	p0 = 7 # 0 Phase
@@ -87,7 +97,7 @@ def CalcPilotError(symbol, bb_fs, oversample):
 	
 	fft_n = len(symbol)
 	Phase_Error = np.zeros(fft_n)
-	Feedback_Gain = 0.5
+	Feedback_Gain = 0.75
 	for i in range(fft_n):
 		if i < fft_n/2:
 			Phase_Error[i] =  (i + 1) * time_offset * (bin_spacing * 360) * Feedback_Gain
@@ -324,7 +334,10 @@ def main():
 
 	CP_Length = 8 * Oversample
 
-	for fudge_offset in range(0,CP_Length):
+	freq = np.fft.fftfreq(64, 1/2000)
+
+	# Start sample for FFT should be in the center of the cyclic prefix
+	for fudge_offset in range(CP_Length//2,(CP_Length//2)+1):
 
 		fudge = fudge_offset
 
@@ -334,23 +347,21 @@ def main():
 
 			# Collect and process the fine ranging symbol
 			Symbol_Baseband = baseband_samples[Start_i:Start_i + (Oversample * FFT_N):int(Oversample/4)]
-			print(f'Sample Count: {Oversample*FFT_N}')
-			print(f'Downsample: {Oversample/4}')
-			print(f'FFT N: {FFT_N * 4}')
-			#Symbol_Baseband = Symbol_Baseband * np.hamming(len(Symbol_Baseband))
+
 			Symbol_Output = np.fft.fft(Symbol_Baseband, FFT_N * 4) * 0.25
 
 			# Select the desired subcarriers
 			Symbol_Output = SelectSubcarriers(Symbol_Output)
 			
-			FRS_Error_Symbol, FRS_Phase_Error, FRS_Mag_Error = CalcSubcarrierError(Symbol_Output)
+			FRS_Error_Symbol = CalcSubcarrierError(Symbol_Output)
+
+			FRS_Error_Symbol = SmoothSymbol(FRS_Error_Symbol, freq)
 
 			Corrected_Symbol = Symbol_Output * FRS_Error_Symbol.conj()
 
-			Corrected_Error_Symbol, Corrected_Phase_Error, Corrected_Mag_Error = CalcSubcarrierError(Corrected_Symbol)
+			Corrected_Error_Symbol = CalcSubcarrierError(Corrected_Symbol)
 			
 
-			freq = np.fft.fftfreq(64, 1/2000)
 
 
 			Eq_Symbol_Output = Symbol_Output * FRS_Error_Symbol.conj()
@@ -443,17 +454,15 @@ def main():
 			plt.subplot(234)
 			plt.title("Phase Angle Error, Degrees")
 			plt.grid(True)
-			plt.yticks([-180,-134,-90,-45,0,45,90,135,180])
-			plt.ylim(-200,200)
-			plt.scatter(freq,FRS_Phase_Error,s=2)
-			plt.scatter(freq,Corrected_Phase_Error,s=2)
+			plt.ylim(-180,180)
+			plt.scatter(freq,np.angle(FRS_Error_Symbol)*180/np.pi,s=2)
+			plt.scatter(freq,np.angle(Corrected_Error_Symbol)*180/np.pi,s=2)
 			plt.legend(['Unequalized', 'Equalized'])
 			plt.subplot(231)
 			plt.title("Magnitude Error")
 			plt.grid(True)
-			plt.ylim(-1.5,1.5)
-			plt.scatter(freq,FRS_Mag_Error,s=2)
-			plt.scatter(freq,Corrected_Mag_Error,s=2)
+			plt.scatter(freq,1-np.abs(FRS_Error_Symbol),s=2)
+			plt.scatter(freq,1-np.abs(Corrected_Error_Symbol),s=2)
 			plt.legend(['Unequalized', 'Equalized'])
 			plt.show()
 
