@@ -163,11 +163,13 @@ def main():
 		print("Python version should be 3.x, exiting")
 		sys.exit(1)
 	# check correct number of parameters were passed to command line
-	if len(sys.argv) != 3:
-		print("Incorrect arg count. Usage: python3 passband_demod.py <input wav file> <cfo>")
+	if len(sys.argv) != 5:
+		print("Incorrect arg count. Usage: python3 passband_demod.py <input wav file> <cfo> <fft n> <cp n>")
 		sys.exit(2)
 
 	carrier_freq = float(sys.argv[2])
+	fft_n = int(sys.argv[3])
+	cp_n = int(sys.argv[4])
 
 	try:
 		audio_sample_rate, audio_samples  = readwav(sys.argv[1])
@@ -180,9 +182,15 @@ def main():
 
 	audio_sample_count = len(audio_samples)
 	
-	CP_N = 32
-	FFT_N = 2048
-	symbol_rate = 48000 / (FFT_N + CP_N)
+	sym_rate = audio_sample_rate / (fft_n + cp_n)
+	bin_width = audio_sample_rate / fft_n
+
+	print(f'Audio Sample Rate: {audio_sample_rate}')
+	print(f'FFT N: {fft_n}')
+	print(f'Bin Width: {bin_width}')
+	print(f'Symbol Rate: {sym_rate:.2f}')
+	print(f'Cyclic Prefix time: {1000*cp_n/audio_sample_rate:.2f} mS, {100*cp_n / (cp_n + fft_n):.1f}%')
+
 
 	# Mix audio with complex baseband carrier to correct LO freq only
 	baseband_samples = np.zeros(audio_sample_count, dtype=complex)
@@ -202,10 +210,12 @@ def main():
 
 	# Attempt Schmidl-Cox conjugate correlation
 	
-	L = int(FFT_N / 2)
+	L = int(fft_n / 2)
+
+	SC_Scale = 10 / L
 	
 	# Create empty list to place metric P values
-	d_range = len(baseband_samples) - FFT_N
+	d_range = len(baseband_samples) - fft_n
 	P1 = np.zeros(d_range, dtype='complex')
 	for d in range(d_range):
 		P1[d] = 0
@@ -213,12 +223,15 @@ def main():
 			P1[d] += baseband_samples[d + m].conj()*baseband_samples[d + m + L]
 			
 	# Discard imaginary part of P1
-	P1 = P1.real / CP_N
+	P1 = P1.real
+
+	# Scale P1 to account for sample rate
+	P1 *= SC_Scale
 
 	# Create moving average filter with length equal to cyclic prefix sample count
 
-	MA_FIR = np.ones(CP_N)
-	P1_MA = np.convolve(P1, MA_FIR, mode='full') / CP_N
+	MA_FIR = np.ones(cp_n)
+	P1_MA = np.convolve(P1, MA_FIR, mode='full') / cp_n
 
 	# Calculate the receive energy, R
 	R = np.zeros(d_range)
@@ -227,14 +240,14 @@ def main():
 		for m in range(L):
 			R[d] += np.power(np.abs(baseband_samples[d + m + L]), 2)
 	# Normalize energy
-	R /= 6 * CP_N
+	R *= SC_Scale
 	
 
 	# Normalize P1 
 	P1_Norm = np.zeros(d_range)
 	for d in range(d_range):
-		x = np.power(R[d],2) * CP_N
-		if R[d] > 0.1:
+		x = np.power(R[d],2)
+		if R[d] > 0.01:
 			P1_Norm[d] = np.power(np.abs(P1_MA[d]), 2) / x
 			
 	P1_Derivative = np.zeros(d_range - 1)
@@ -244,14 +257,14 @@ def main():
 	Sync_List = []
 	Sync_Arm = 0
 	Sync_Arm_Timer = 0
-	Sync_Inhibit_Period = (2 * L) + CP_N
+	Sync_Inhibit_Period = (2 * L) + cp_n
 	Sync_Inhibit_Timer = Sync_Inhibit_Period
 	Sync_Inhibit_Record = np.zeros(d_range)
 	Sync_Arm_Record = np.zeros(d_range)
 	for d in range(1,d_range-1):
 		Sync_Inhibit_Timer += 1
 		if Sync_Inhibit_Timer > Sync_Inhibit_Period:
-			if P1_Norm[d] > 0.25:
+			if P1_Norm[d] > 0.5:
 				Sync_Arm = 1
 				Sync_Arm_Timer = 0
 			if Sync_Arm > 0:
@@ -291,7 +304,7 @@ def main():
 	plt.subplot(231)
 	plt.plot(audio_samples, linewidth=1)
 	plt.title("Audio Samples")
-	plt.ylim(-0.5,0.5)
+	plt.ylim(-1.5,1.5)
 	plt.subplot(232)
 	plt.plot(audio_psd[0], audio_psd[1], '.', ms=2)
 	plt.xlim(0, 4000)

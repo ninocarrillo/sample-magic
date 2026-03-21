@@ -95,26 +95,53 @@ def main():
 		print("Python version should be 3.x, exiting")
 		sys.exit(1)
 	# check correct number of parameters were passed to command line
-	if len(sys.argv) != 4:
-		print("Incorrect arg count. Usage: python3 gen_ofdm_wav.py <dac bits> <symbol count> <output wav file>")
+	if len(sys.argv) != 5:
+		print("Incorrect arg count. Usage: python3 gen_ofdm_wav.py <dac bits> <symbol count> <repeat count> <output wav file>")
 		sys.exit(2)
 
 	dac_bits = int(sys.argv[1])
 	symbol_count = int(sys.argv[2])
-	wav_file_name = sys.argv[3]
-	audio_sample_rate = 48000
-	cp_n = 32
-	fft_n = 2048
+	repeat_n = int(sys.argv[3])
+	wav_file_name = sys.argv[4]
+	audio_sample_rate = 12000
+	cp_n = 16
+	fft_n = 512
+	f_0 = 300
+	f_max = 3100
+	pilot_n = 8
+	sym_rate = audio_sample_rate / (fft_n + cp_n)
+	bin_width = audio_sample_rate / fft_n
+	bin_0 = int(np.ceil(300/bin_width))
+	bin_max = int(np.floor(3100/bin_width))
+	bin_n = bin_max - bin_0
+	data_carrier_n = bin_n - pilot_n
+
+	print(f'Audio Sample Rate: {audio_sample_rate}')
+	print(f'FFT N: {fft_n}')
+	print(f'Bin Width: {bin_width}')
+	print(f'Symbol Rate: {sym_rate:.2f}')
+	print(f'Cyclic Prefix: {cp_n} samples, {1000*cp_n/audio_sample_rate:.2f} mS, {100*cp_n / (cp_n + fft_n):.1f}%')
+	print(f'Occupied bin count: {bin_n}')
+	print(f'Pilot count: {pilot_n}')
+	print(f'QPSK Bits/Sec: {data_carrier_n*sym_rate*2:.0f}')
+	print(f'8PSK Bits/Sec: {data_carrier_n*sym_rate*3:.0f}')
+	print(f'16QAM Bits/Sec: {data_carrier_n*sym_rate*4:.0f}')
+	print(f'32QAM Bits/Sec: {data_carrier_n*sym_rate*5:.0f}')
+	print(f'64QAM Bits/Sec: {data_carrier_n*sym_rate*6:.0f}')
+	print(f'128QAM Bits/Sec: {data_carrier_n*sym_rate*7:.0f}')
+	print(f'256QAM Bits/Sec: {data_carrier_n*sym_rate*8:.0f}')
+
 	
 	# Generate Schmidl-Cox preamble
-	
 	audio_samples = np.zeros(fft_n+cp_n)
-	audio_samples = np.concatenate([audio_samples, GenSCPre(fft_n, cp_n, 13, 13+116)])
-	audio_samples = np.concatenate([audio_samples, GenProbe(fft_n, cp_n, 13, 13+116)])
-	audio_samples = np.concatenate([audio_samples, GenProbe(fft_n, cp_n, 13, 13+116)])
-	audio_samples = np.concatenate([audio_samples, GenProbe(fft_n, cp_n, 13, 13+116)])
-	audio_samples = np.concatenate([audio_samples, GenProbe(fft_n, cp_n, 13, 13+116)])
-	audio_samples = np.concatenate([audio_samples, GenProbe(fft_n, cp_n, 13, 13+116)])
+	audio_samples = np.concatenate([audio_samples, GenSCPre(fft_n, cp_n, bin_0, bin_0+bin_n)])
+	audio_samples = np.concatenate([audio_samples, GenProbe(fft_n, cp_n, bin_0, bin_0+bin_n)])
+	audio_samples = np.concatenate([audio_samples, GenProbe(fft_n, cp_n, bin_0, bin_0+bin_n)])
+	audio_samples = np.concatenate([audio_samples, GenProbe(fft_n, cp_n, bin_0, bin_0+bin_n)])
+	audio_samples = np.concatenate([audio_samples, GenProbe(fft_n, cp_n, bin_0, bin_0+bin_n)])
+	audio_samples = np.concatenate([audio_samples, GenProbe(fft_n, cp_n, bin_0, bin_0+bin_n)])
+
+	audio_samples = np.tile(audio_samples, repeat_n)
 	
 	plt.figure()
 	plt.plot(audio_samples.real)
