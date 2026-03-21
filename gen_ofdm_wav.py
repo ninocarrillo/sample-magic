@@ -12,10 +12,15 @@ from scipy.signal import firwin
 def PlotPilots(start_carrier, end_carrier, pilot_count):
 	pilot_indicies = []
 	carrier_interval = (end_carrier-start_carrier) // (pilot_count - 1)
+	if carrier_interval % 2:
+		carrier_interval -= 1
 	this_pilot = start_carrier
+	if this_pilot % 2:
+		this_pilot += 1
 	this_coord = 1+0j
 	for i in range(pilot_count):
-		pilot_indicies.append([int(this_pilot), this_coord])
+		if this_pilot <= end_carrier:
+			pilot_indicies.append([int(this_pilot), this_coord])
 		this_pilot += carrier_interval
 		this_coord *= 1j
 	return pilot_indicies
@@ -170,7 +175,8 @@ def main():
 
 	
 	# Generate Schmidl-Cox preamble
-	audio_samples = GenSCPre(fft_n, cp_n, bin_0, bin_0+bin_n, 0)
+	audio_samples = np.zeros(fft_n+cp_n)
+	audio_samples = np.concatenate([audio_samples,GenSCPre(fft_n, cp_n, bin_0, bin_0+bin_n, 0)])
 	audio_samples = np.concatenate([audio_samples, GenRandomQPSK(fft_n, cp_n, bin_0, bin_0+bin_n, pilots)])
 	audio_samples = np.concatenate([audio_samples, GenRandomQPSK(fft_n, cp_n, bin_0, bin_0+bin_n, pilots)])
 	audio_samples = np.concatenate([audio_samples, GenRandomQPSK(fft_n, cp_n, bin_0, bin_0+bin_n, pilots)])
@@ -178,7 +184,6 @@ def main():
 
 	audio_samples = np.tile(audio_samples, repeat_n)
 
-	audio_samples = np.concatenate([np.zeros(fft_n+cp_n),audio_samples])
 	
 	plt.figure()
 	plt.plot(audio_samples.real)

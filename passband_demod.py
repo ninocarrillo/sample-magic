@@ -11,10 +11,66 @@ from scipy.fft import fft, fftfreq
 from scipy.signal import firwin
 from scipy.signal import savgol_filter
 
+def FilterInterpOddBB(symbol, start_i, end_i): 
+	# Interpolate from indicated indices, assuming data is only in odd indices
+	# work on magnitudes first
+	for i in range(start_i, end_i + 1):
+		if i % 2:
+			# index is odd, there is data here
+			pass
+		else:
+			# index is even, interpolate
+			if i == start_i:
+				# the first sample is empty, interpolate linearly from the next two data points:
+				delta = np.abs(symbol[i+3]) - np.abs(symbol[i+1])
+				symbol[i] = symbol[i+1] - (delta / 2)
+			elif i == end_i:
+				# the last sample is empty, interpolate linearly from the previous two data points:
+				delta = np.abs(symbol[i-3]) - np.abs(symbol[i-1])
+				symbol[i] = np.abs(symbol[i-1]) - (delta / 2)
+			else:
+				# inner sample, interpolate between surrounding points:
+				symbol[i] = (np.abs(symbol[i-1]) + np.abs(symbol[i+1])) / 2
+		print(f'Index: {i}, {symbol[i]}')
+
+	return symbol
+
+def CalcSubcarrierError(symbol):
+	FRS_Phase = [135,-90,45,135,-45,45,-45,0,-45,135,-45,45,135,-135,45,-45,135,-45,-45,135,-135,0,-45,-45,-135,-135,-45,-45,-135,45,-135,45,135,135,-135,135,-135,45,-45,-45,135,-45,45,0,-135,-135,135,135,-45,45,45,-45,-135,-135,45,-45,45,-180,-45,-135,-135,45,-135,-135]
+	FRS_Symbol = np.exp(np.multiply(1j*np.pi/180,FRS_Phase))
+	Error_Vector = FRS_Symbol.conj() * symbol
+	Error_Vector = Error_Vector * (1/np.power(np.abs(Error_Vector),2))
+	# Remove data for empty subcarriers
+	Error_Vector[0] = Error_Vector[2]
+	Error_Vector[1] = Error_Vector[2]
+	Error_Vector[32] = Error_Vector[33]
+	return Error_Vector
+
 def CalcSymbolError(rx_symbol, ref_symbol):
 	error = ref_symbol.conj() * rx_symbol 
-	error = error / np.power(np.abs(error),2)
+	for i in range(len(error)):
+		if np.abs(error[i]) > 0:
+			error[i] = error[i] / np.power(np.abs(error[i]),2)
+		else:
+			#error[i] = 1
+			pass
 	return error
+
+def PlotPilots(start_carrier, end_carrier, pilot_count):
+	pilot_indicies = []
+	carrier_interval = (end_carrier-start_carrier) // (pilot_count - 1)
+	if carrier_interval % 2:
+		carrier_interval -= 1
+	this_pilot = start_carrier
+	if this_pilot % 2:
+		this_pilot += 1
+	this_coord = 1+0j
+	for i in range(pilot_count):
+		if this_pilot <= end_carrier:
+			pilot_indicies.append([int(this_pilot), this_coord])
+		this_pilot += carrier_interval
+		this_coord *= 1j
+	return pilot_indicies
 
 def GenSCPreBB(sym_n, start_carrier, end_carrier, seed):
 	np.random.seed(seed)
@@ -52,16 +108,6 @@ def PadBasebandZeros(symbol, rate):
 		padded_symbol[i] = symbol[i]
 	return padded_symbol
 
-def CalcSubcarrierError(symbol):
-	FRS_Phase = [135,-90,45,135,-45,45,-45,0,-45,135,-45,45,135,-135,45,-45,135,-45,-45,135,-135,0,-45,-45,-135,-135,-45,-45,-135,45,-135,45,135,135,-135,135,-135,45,-45,-45,135,-45,45,0,-135,-135,135,135,-45,45,45,-45,-135,-135,45,-45,45,-180,-45,-135,-135,45,-135,-135]
-	FRS_Symbol = np.exp(np.multiply(1j*np.pi/180,FRS_Phase))
-	Error_Vector = FRS_Symbol.conj() * symbol
-	Error_Vector = Error_Vector * (1/np.power(np.abs(Error_Vector),2))
-	# Remove data for empty subcarriers
-	Error_Vector[0] = Error_Vector[2]
-	Error_Vector[1] = Error_Vector[2]
-	Error_Vector[32] = Error_Vector[33]
-	return Error_Vector
 	
 def CalcPilotError(symbol, bb_fs, oversample):
 	p0 = 7 # 0 Phase
@@ -194,7 +240,7 @@ def main():
 	bin_n = (bin_max-bin_0) + 1
 
 	pilot_n = 8
-	pilots = [13, 30, 47, 64, 81, 98, 115, 132]
+	pilots = PlotPilots(bin_0, bin_max, pilot_n)
 
 	try:
 		audio_sample_rate, audio_samples  = readwav(sys.argv[1])
@@ -361,18 +407,19 @@ def main():
 	fft_freq = np.fft.fftfreq(fft_n, 1/audio_sample_rate)
 	fft_freq = fft_freq[:fft_n//2]
 
-	# Calculate reference baseband from known SC Preamble data
-	Ref_BB = GenSCPreBB(fft_n, bin_0, bin_max, 0)
-	# Calculate reference error this will be zeros)
-	Error_BB = CalcSymbolError(Ref_BB, Ref_BB)
 
 	# Start sample for FFT should be in the center of the cyclic prefix
 
 	# This fudge factor picks the first sample after the cyclic prefix.
-	fudge = cp_n //2
+	fudge = cp_n 
 
 	sg = [[0,1],[0,2],[1,1],[1,2]]
+
 	for SC_Peak_Sample in Sync_List:
+		# Calculate reference baseband from known SC Preamble data
+		Ref_BB = GenSCPreBB(fft_n, bin_0, bin_max, 0)
+		# Calculate reference error this will be zeros)
+		Error_BB = CalcSymbolError(Ref_BB, Ref_BB)
 		fig,ax = plt.subplots(2,3, figsize=(12,8))
 		plt.suptitle(f'Fudge: {fudge}, Burst: {SC_Peak_Sample}')
 		fig.tight_layout()
@@ -381,15 +428,11 @@ def main():
 		Start_i = SC_Peak_Sample + SC_Offset
 		Start_i -= (fft_n + cp_n)
 
-
-
 		Sym_BB = []
 		Sym_BB_Eq = []
 		for sym_i in range(4):
 			Sym_BB.append(np.fft.fft(baseband_samples[Start_i:Start_i + fft_n])*bin_n/fft_n)
 			Start_i += (fft_n + cp_n)
-			
-				
 		
 			ax[sg[sym_i][0],sg[sym_i][1]].set_title(f'Symbol {sym_i}')
 			ax[sg[sym_i][0],sg[sym_i][1]].set_xlim(-1.5,1.5)
@@ -397,32 +440,35 @@ def main():
 			ax[sg[sym_i][0],sg[sym_i][1]].grid(True)
 		
 			# Plot the unequalized subcarrier I/Q in grey
-			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB[sym_i][bin_0: bin_max+1].real,Sym_BB[sym_i][bin_0: bin_max+1].imag, color='grey', s=2)
+			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB[sym_i][bin_0: bin_max+1].real,Sym_BB[sym_i][bin_0: bin_max+1].imag, color='grey', s=4)
 
 			# Plot the unequalized pilots
-			for pilot in pilots:
-				ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB[sym_i][pilot].real],[0,Sym_BB[sym_i][pilot].imag], color='grey', linewidth=1)
+			if sym_i > 0: # no pilots in preamble
+				for p in pilots:
+					ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB[sym_i][p[0]].real],[0,Sym_BB[sym_i][p[0]].imag], color='grey', linewidth=4)
 
 		# Collect equalization data from the Schmidle Cox preamble:
 		# Even indices contain channel noise measurement, odd contain channel response measurement
 		Error_BB = CalcSymbolError(Sym_BB[0],Ref_BB)
+		#Error_BB = FilterInterpOddBB(Error_BB, bin_0, bin_max)
 
 		for sym_i in range(4):
 			Sym_BB_Eq.append(Sym_BB[sym_i] * Error_BB.conj())
 		
 			# Plot the equalized subcarrier I/Q in blue
-			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB_Eq[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq[sym_i][bin_0: bin_max+1].imag, color='blue', s=2)
+			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB_Eq[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq[sym_i][bin_0: bin_max+1].imag, color='red', s=2)
 			
 			# Plot the equalized pilots
-			for pilot in pilots:
-				ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB_Eq[sym_i][pilot].real],[0,Sym_BB_Eq[sym_i][pilot].imag], color='blue', linewidth=1)
+			for p in pilots:
+				if sym_i > 0: # no pilots in preamble
+					ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB_Eq[sym_i][p[0]].real],[0,Sym_BB_Eq[sym_i][p[0]].imag], color='blue', linewidth=1)
 
 
 		
 
 		ax[0,0].set_title('Channel Magnitude')
-		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Sym_BB[0][bin_0: bin_max+1]), s=2)
-		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Error_BB[bin_0: bin_max+1]), s=2)
+		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Sym_BB[0][bin_0: bin_max+1]), s=2, color='grey')
+		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Error_BB[bin_0: bin_max+1]), s=2, color='blue')
 		ax[0,0].set_ylim(-0.5,2)
 		ax[1,0].set_title('Channel Phase')
 		ax[1,0].scatter(fft_freq[bin_0: bin_max+1],np.angle(Sym_BB[0][bin_0: bin_max+1]), s=2)
