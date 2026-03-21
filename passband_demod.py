@@ -363,7 +363,7 @@ def main():
 	# Start sample for FFT should be in the center of the cyclic prefix
 
 	# This fudge factor picks the first sample after the cyclic prefix.
-	fudge = cp_n + 1
+	fudge = cp_n +1
 
 	sg = [[0,1],[0,2],[1,1],[1,2]]
 	for SC_Peak_Sample in Sync_List:
@@ -411,6 +411,7 @@ def main():
 		ax[0,0].set_ylim(-0.5,2)
 		ax[1,0].set_title('Channel Phase')
 		ax[1,0].scatter(fft_freq[bin_0: bin_max+1],np.angle(Ref_BB[bin_0: bin_max+1]), s=2)
+		ax[1,0].scatter(fft_freq[bin_0: bin_max+1],np.angle(Sym_BB[0][bin_0: bin_max+1]), s=2)
 		ax[1,0].set_ylim(-3.5,3.5)
 
 		plt.show()
