@@ -11,9 +11,14 @@ from scipy.fft import fft, fftfreq
 from scipy.signal import firwin
 from scipy.signal import savgol_filter
 
+def CalcSymbolError(rx_symbol, ref_symbol):
+	error = ref_symbol.conj() * rx_symbol 
+	error = error / np.power(np.abs(error),2)
+	return error
+
 def GenSCPreBB(sym_n, start_carrier, end_carrier, seed):
 	np.random.seed(seed)
-	baseband = np.zeros(sym_n//2, dtype='complex')
+	baseband = np.zeros(sym_n, dtype='complex')
 	# set low energy constellation points for the preamble
 	coord = np.sqrt(2)/2
 	for i in range(start_carrier, end_carrier+1):
@@ -369,9 +374,9 @@ def main():
 		Start_i = SC_Peak_Sample + SC_Offset
 		Start_i -= (fft_n + cp_n)
 
-		Symbol_Baseband = []
+		Sym_BB = []
 		for sym_i in range(4):
-			Symbol_Baseband.append(np.fft.fft(baseband_samples[Start_i:Start_i + fft_n])*bin_n/fft_n)
+			Sym_BB.append(np.fft.fft(baseband_samples[Start_i:Start_i + fft_n])*bin_n/fft_n)
 			Start_i += (fft_n + cp_n)
 		
 			ax[sg[sym_i][0],sg[sym_i][1]].set_title(f'Symbol {sym_i}')
@@ -380,20 +385,28 @@ def main():
 			ax[sg[sym_i][0],sg[sym_i][1]].grid(True)
 		
 			# Plot the unequalized subcarrier I/Q
-			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Symbol_Baseband[sym_i].real,Symbol_Baseband[sym_i].imag, color='grey', s=2)
+			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB[sym_i][bin_0: bin_max+1].real,Sym_BB[sym_i][bin_0: bin_max+1].imag, color='grey', s=2)
 
 			# Plot the unequalized pilots
 			if sym_i > 0:
 				for pilot in pilots:
-					ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Symbol_Baseband[sym_i][pilot].real],[0,Symbol_Baseband[sym_i][pilot].imag], color='green', linewidth=1)
+					ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB[sym_i][pilot].real],[0,Sym_BB[sym_i][pilot].imag], color='green', linewidth=1)
 
 		# Collect equalization data from the Schmidle Cox preamble:
 		Ref_BB = GenSCPreBB(fft_n, bin_0, bin_max, 0)
+		# Even indices contain channel noise measurement, odd contain channel response measurement
+		Error_BB = CalcSymbolError(Sym_BB[0],Ref_BB)
+
 		fft_freq = np.fft.fftfreq(fft_n, 1/audio_sample_rate)
 		fft_freq = fft_freq[:fft_n//2]
+
+
+
 		ax[0,0].set_title('Channel Magnitude')
 		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Ref_BB[bin_0: bin_max+1]), s=2)
-		ax[0,0].set_ylim(-0.5,2.5)
+		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Sym_BB[0][bin_0: bin_max+1]), s=2)
+		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Error_BB[bin_0: bin_max+1]), s=2)
+		ax[0,0].set_ylim(-0.5,2)
 		ax[1,0].set_title('Channel Phase')
 		ax[1,0].scatter(fft_freq[bin_0: bin_max+1],np.angle(Ref_BB[bin_0: bin_max+1]), s=2)
 		ax[1,0].set_ylim(-3.5,3.5)
