@@ -374,6 +374,9 @@ def main():
 		Start_i = SC_Peak_Sample + SC_Offset
 		Start_i -= (fft_n + cp_n)
 
+
+		Ref_BB = GenSCPreBB(fft_n, bin_0, bin_max, 0)
+
 		Sym_BB = []
 		for sym_i in range(4):
 			Sym_BB.append(np.fft.fft(baseband_samples[Start_i:Start_i + fft_n])*bin_n/fft_n)
@@ -393,7 +396,6 @@ def main():
 					ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB[sym_i][pilot].real],[0,Sym_BB[sym_i][pilot].imag], color='green', linewidth=1)
 
 		# Collect equalization data from the Schmidle Cox preamble:
-		Ref_BB = GenSCPreBB(fft_n, bin_0, bin_max, 0)
 		# Even indices contain channel noise measurement, odd contain channel response measurement
 		Error_BB = CalcSymbolError(Sym_BB[0],Ref_BB)
 
