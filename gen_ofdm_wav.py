@@ -9,7 +9,19 @@ import matplotlib.pyplot as plt
 from scipy.fft import ifft, fft, fftfreq
 from scipy.signal import firwin
 
-def GenSCPre(sym_n, pre_n, start_carrier, end_carrier):
+def PlotPilots(start_carrier, end_carrier, pilot_count):
+	pilot_indicies = []
+	carrier_interval = (end_carrier-start_carrier) // (pilot_count - 1)
+	this_pilot = start_carrier
+	this_coord = 1+0j
+	for i in range(pilot_count):
+		pilot_indicies.append([int(this_pilot), this_coord])
+		this_pilot += carrier_interval
+		this_coord *= 1j
+	return pilot_indicies
+
+def GenSCPre(sym_n, pre_n, start_carrier, end_carrier, seed):
+	np.random.seed(seed)
 	baseband = np.zeros(sym_n, dtype='complex')
 	# set low energy constellation points for the preamble
 	coord = np.sqrt(2)/2
@@ -36,6 +48,26 @@ def GenProbe(sym_n, pre_n, start_carrier, end_carrier):
 	coord = np.sqrt(2)/2
 	for i in range(start_carrier, end_carrier+1):
 		baseband[i] = np.random.choice([-coord,coord]) + (np.random.choice([-coord,coord]) * 1j)
+		if i > 0:
+			baseband[(sym_n - i)] = baseband[i].conj()
+	# Generate the audio
+	sc_audio = ifft(baseband, sym_n)
+	# Scale the audio based on carriers in use
+	sc_audio *= sym_n / (end_carrier - start_carrier)
+	# prepend cyclic prefix
+	sc_audio = np.concatenate([sc_audio[-pre_n:], sc_audio])
+	return sc_audio.real
+
+def GenRandomQPSK(sym_n, pre_n, start_carrier, end_carrier, pilots):
+	baseband = np.zeros(sym_n, dtype='complex')
+	coord = np.sqrt(2)/2
+	for i in range(start_carrier, end_carrier+1):
+		baseband[i] = np.random.choice([-coord,coord]) + (np.random.choice([-coord,coord]) * 1j)
+	# Add pilot carriers
+	for pilot in pilots:
+		baseband[pilot[0]] = pilot[1] * 1j
+	# Make real by setting conjugates negative:
+	for i in range(start_carrier, end_carrier+1):
 		if i > 0:
 			baseband[(sym_n - i)] = baseband[i].conj()
 	# Generate the audio
@@ -115,6 +147,8 @@ def main():
 	bin_max = int(np.floor(3100/bin_width))
 	bin_n = (bin_max - bin_0) + 1
 	data_carrier_n = bin_n - pilot_n
+	pilots = PlotPilots(bin_0, bin_max, pilot_n)
+
 
 	print(f'Audio Sample Rate: {audio_sample_rate}')
 	print(f'FFT N: {fft_n}')
@@ -132,15 +166,15 @@ def main():
 	print(f'64QAM Bits/Sec: {data_carrier_n*sym_rate*6:.0f}')
 	print(f'128QAM Bits/Sec: {data_carrier_n*sym_rate*7:.0f}')
 	print(f'256QAM Bits/Sec: {data_carrier_n*sym_rate*8:.0f}')
+	print(f'Pilots: {pilots}')
 
 	
 	# Generate Schmidl-Cox preamble
-	audio_samples = GenSCPre(fft_n, cp_n, bin_0, bin_0+bin_n)
-	audio_samples = np.concatenate([audio_samples, GenProbe(fft_n, cp_n, bin_0, bin_0+bin_n)])
-	audio_samples = np.concatenate([audio_samples, GenProbe(fft_n, cp_n, bin_0, bin_0+bin_n)])
-	audio_samples = np.concatenate([audio_samples, GenProbe(fft_n, cp_n, bin_0, bin_0+bin_n)])
-	audio_samples = np.concatenate([audio_samples, GenProbe(fft_n, cp_n, bin_0, bin_0+bin_n)])
-	audio_samples = np.concatenate([audio_samples, GenProbe(fft_n, cp_n, bin_0, bin_0+bin_n)])
+	audio_samples = GenSCPre(fft_n, cp_n, bin_0, bin_0+bin_n, 0)
+	audio_samples = np.concatenate([audio_samples, GenRandomQPSK(fft_n, cp_n, bin_0, bin_0+bin_n, pilots)])
+	audio_samples = np.concatenate([audio_samples, GenRandomQPSK(fft_n, cp_n, bin_0, bin_0+bin_n, pilots)])
+	audio_samples = np.concatenate([audio_samples, GenRandomQPSK(fft_n, cp_n, bin_0, bin_0+bin_n, pilots)])
+	audio_samples = np.concatenate([audio_samples, GenRandomQPSK(fft_n, cp_n, bin_0, bin_0+bin_n, pilots)])
 
 	audio_samples = np.tile(audio_samples, repeat_n)
 

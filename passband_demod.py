@@ -11,6 +11,20 @@ from scipy.fft import fft, fftfreq
 from scipy.signal import firwin
 from scipy.signal import savgol_filter
 
+def GenSCPreBB(sym_n, start_carrier, end_carrier, seed):
+	np.random.seed(seed)
+	baseband = np.zeros(sym_n//2, dtype='complex')
+	# set low energy constellation points for the preamble
+	coord = np.sqrt(2)/2
+	for i in range(start_carrier, end_carrier+1):
+		if i % 2:
+			# i is odd, zero this subcarrier
+			baseband[i] = 0
+		else:
+			# i is even
+			baseband[i] = np.random.choice([-coord,coord]) + (np.random.choice([-coord,coord]) * 1j)
+	return baseband
+
 def SmoothSymbol(symbol, freq):
 	paired = zip(freq,symbol)
 	sorted_paired = sorted(paired)
@@ -173,6 +187,9 @@ def main():
 	bin_0 = int(sys.argv[5])
 	bin_max = int(sys.argv[6])
 	bin_n = (bin_max-bin_0) + 1
+
+	pilot_n = 8
+	pilots = [13, 30, 47, 64, 81, 98, 115, 132]
 
 	try:
 		audio_sample_rate, audio_samples  = readwav(sys.argv[1])
@@ -338,36 +355,50 @@ def main():
 
 
 	# Start sample for FFT should be in the center of the cyclic prefix
-	for fudge_offset in range(cp_n, cp_n+2):
 
-		fudge = fudge_offset
+	# This fudge factor picks the first sample after the cyclic prefix.
+	fudge = cp_n + 1
 
-		for SC_Peak_Sample in Sync_List:
-			SC_Offset = (2 * L) + fudge
-			Start_i = SC_Peak_Sample + SC_Offset
-			Start_i -= (fft_n + cp_n)
+	sg = [[0,1],[0,2],[1,1],[1,2]]
+	for SC_Peak_Sample in Sync_List:
+		fig,ax = plt.subplots(2,3, figsize=(12,8))
+		plt.suptitle(f'Fudge: {fudge}, Burst: {SC_Peak_Sample}')
+		fig.tight_layout()
 
-			# Collect and process the fine ranging symbol
-			Symbol_Baseband = baseband_samples[Start_i:Start_i + fft_n]
+		SC_Offset = (2 * L) + fudge
+		Start_i = SC_Peak_Sample + SC_Offset
+		Start_i -= (fft_n + cp_n)
 
-			Symbol_Output = np.fft.fft(Symbol_Baseband, fft_n) * (bin_n / fft_n)
-			
-			
-			fig,ax = plt.subplots(2,3, figsize=(12,8))
-			plt.suptitle(f'Fudge: {fudge}')
-			fig.tight_layout()
-			plt.subplot(231)
-			plt.scatter(freq[bin_0:bin_max],np.abs(Symbol_Output[bin_0:bin_max]), s=2)
-			plt.ylim(0,2)
-			plt.subplot(234)
-			plt.scatter(freq[bin_0:bin_max],np.angle(Symbol_Output[bin_0:bin_max]), s=2)
-			plt.ylim(-np.pi,np.pi)
-			plt.subplot(232)
-			plt.scatter(Symbol_Output[bin_0:bin_max].real, Symbol_Output[bin_0:bin_max].imag, s=2)
-			plt.xlim(-1.5,1.5)
-			plt.ylim(-1.5,1.5)
-			plt.grid(True)
-			plt.show()
+		Symbol_Baseband = []
+		for sym_i in range(4):
+			Symbol_Baseband.append(np.fft.fft(baseband_samples[Start_i:Start_i + fft_n])*bin_n/fft_n)
+			Start_i += (fft_n + cp_n)
+		
+			ax[sg[sym_i][0],sg[sym_i][1]].set_title(f'Symbol {sym_i}')
+			ax[sg[sym_i][0],sg[sym_i][1]].set_xlim(-1.5,1.5)
+			ax[sg[sym_i][0],sg[sym_i][1]].set_ylim(-1.5,1.5)
+			ax[sg[sym_i][0],sg[sym_i][1]].grid(True)
+		
+			# Plot the unequalized subcarrier I/Q
+			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Symbol_Baseband[sym_i].real,Symbol_Baseband[sym_i].imag, color='grey', s=2)
+
+			# Plot the unequalized pilots
+			if sym_i > 0:
+				for pilot in pilots:
+					ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Symbol_Baseband[sym_i][pilot].real],[0,Symbol_Baseband[sym_i][pilot].imag], color='green', linewidth=1)
+
+		# Collect equalization data from the Schmidle Cox preamble:
+		Ref_BB = GenSCPreBB(fft_n, bin_0, bin_max, 0)
+		fft_freq = np.fft.fftfreq(fft_n, 1/audio_sample_rate)
+		fft_freq = fft_freq[:fft_n//2]
+		ax[0,0].set_title('Channel Magnitude')
+		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Ref_BB[bin_0: bin_max+1]), s=2)
+		ax[0,0].set_ylim(-0.5,2.5)
+		ax[1,0].set_title('Channel Phase')
+		ax[1,0].scatter(fft_freq[bin_0: bin_max+1],np.angle(Ref_BB[bin_0: bin_max+1]), s=2)
+		ax[1,0].set_ylim(-3.5,3.5)
+
+		plt.show()
 
 
 
