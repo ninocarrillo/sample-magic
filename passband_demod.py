@@ -163,13 +163,16 @@ def main():
 		print("Python version should be 3.x, exiting")
 		sys.exit(1)
 	# check correct number of parameters were passed to command line
-	if len(sys.argv) != 5:
-		print("Incorrect arg count. Usage: python3 passband_demod.py <input wav file> <cfo> <fft n> <cp n>")
+	if len(sys.argv) != 7:
+		print("Incorrect arg count. Usage: python3 passband_demod.py <input wav file> <cfo> <fft n> <cp n> <bin 0> <bin max>")
 		sys.exit(2)
 
 	carrier_freq = float(sys.argv[2])
 	fft_n = int(sys.argv[3])
 	cp_n = int(sys.argv[4])
+	bin_0 = int(sys.argv[5])
+	bin_max = int(sys.argv[6])
+	bin_n = (bin_max-bin_0) + 1
 
 	try:
 		audio_sample_rate, audio_samples  = readwav(sys.argv[1])
@@ -178,7 +181,8 @@ def main():
 		sys.exit(3)
 
 	# Normalize audio amplitude
-	audio_samples = audio_samples / max(np.abs(audio_samples))
+	if audio_samples.dtype == np.int16:
+		audio_samples = audio_samples / 32767
 
 	audio_sample_count = len(audio_samples)
 	
@@ -191,6 +195,8 @@ def main():
 	print(f'Symbol Rate: {sym_rate:.2f}')
 	print(f'Cyclic Prefix time: {1000*cp_n/audio_sample_rate:.2f} mS, {100*cp_n / (cp_n + fft_n):.1f}%')
 
+
+	freq = np.fft.fftfreq(fft_n, 1/audio_sample_rate)
 
 	# Mix audio with complex baseband carrier to correct LO freq only
 	baseband_samples = np.zeros(audio_sample_count, dtype=complex)
@@ -329,6 +335,39 @@ def main():
 	plt.legend(['P','P Moving Avg','R Energy','M Final Metric', 'Derivative', 'Sync Arm'])
 	plt.show()
 
+
+
+	# Start sample for FFT should be in the center of the cyclic prefix
+	for fudge_offset in range(cp_n, cp_n+2):
+
+		fudge = fudge_offset
+
+		for SC_Peak_Sample in Sync_List:
+			SC_Offset = (2 * L) + fudge
+			Start_i = SC_Peak_Sample + SC_Offset
+			Start_i -= (fft_n + cp_n)
+
+			# Collect and process the fine ranging symbol
+			Symbol_Baseband = baseband_samples[Start_i:Start_i + fft_n]
+
+			Symbol_Output = np.fft.fft(Symbol_Baseband, fft_n) * (bin_n / fft_n)
+			
+			
+			fig,ax = plt.subplots(2,3, figsize=(12,8))
+			plt.suptitle(f'Fudge: {fudge}')
+			fig.tight_layout()
+			plt.subplot(231)
+			plt.scatter(freq[bin_0:bin_max],np.abs(Symbol_Output[bin_0:bin_max]), s=2)
+			plt.ylim(0,2)
+			plt.subplot(234)
+			plt.scatter(freq[bin_0:bin_max],np.angle(Symbol_Output[bin_0:bin_max]), s=2)
+			plt.ylim(-np.pi,np.pi)
+			plt.subplot(232)
+			plt.scatter(Symbol_Output[bin_0:bin_max].real, Symbol_Output[bin_0:bin_max].imag, s=2)
+			plt.xlim(-1.5,1.5)
+			plt.ylim(-1.5,1.5)
+			plt.grid(True)
+			plt.show()
 
 
 

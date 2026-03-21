@@ -113,7 +113,7 @@ def main():
 	bin_width = audio_sample_rate / fft_n
 	bin_0 = int(np.ceil(300/bin_width))
 	bin_max = int(np.floor(3100/bin_width))
-	bin_n = bin_max - bin_0
+	bin_n = (bin_max - bin_0) + 1
 	data_carrier_n = bin_n - pilot_n
 
 	print(f'Audio Sample Rate: {audio_sample_rate}')
@@ -121,6 +121,8 @@ def main():
 	print(f'Bin Width: {bin_width}')
 	print(f'Symbol Rate: {sym_rate:.2f}')
 	print(f'Cyclic Prefix: {cp_n} samples, {1000*cp_n/audio_sample_rate:.2f} mS, {100*cp_n / (cp_n + fft_n):.1f}%')
+	print(f'Bin 0: {bin_0}')
+	print(f'Bin Max: {bin_max}')
 	print(f'Occupied bin count: {bin_n}')
 	print(f'Pilot count: {pilot_n}')
 	print(f'QPSK Bits/Sec: {data_carrier_n*sym_rate*2:.0f}')
@@ -133,8 +135,7 @@ def main():
 
 	
 	# Generate Schmidl-Cox preamble
-	audio_samples = np.zeros(fft_n+cp_n)
-	audio_samples = np.concatenate([audio_samples, GenSCPre(fft_n, cp_n, bin_0, bin_0+bin_n)])
+	audio_samples = GenSCPre(fft_n, cp_n, bin_0, bin_0+bin_n)
 	audio_samples = np.concatenate([audio_samples, GenProbe(fft_n, cp_n, bin_0, bin_0+bin_n)])
 	audio_samples = np.concatenate([audio_samples, GenProbe(fft_n, cp_n, bin_0, bin_0+bin_n)])
 	audio_samples = np.concatenate([audio_samples, GenProbe(fft_n, cp_n, bin_0, bin_0+bin_n)])
@@ -142,6 +143,8 @@ def main():
 	audio_samples = np.concatenate([audio_samples, GenProbe(fft_n, cp_n, bin_0, bin_0+bin_n)])
 
 	audio_samples = np.tile(audio_samples, repeat_n)
+
+	audio_samples = np.concatenate([np.zeros(fft_n+cp_n),audio_samples])
 	
 	plt.figure()
 	plt.plot(audio_samples.real)
