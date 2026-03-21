@@ -358,12 +358,18 @@ def main():
 	plt.show()
 
 
+	fft_freq = np.fft.fftfreq(fft_n, 1/audio_sample_rate)
+	fft_freq = fft_freq[:fft_n//2]
+
+	# Calculate reference baseband from known SC Preamble data
 	Ref_BB = GenSCPreBB(fft_n, bin_0, bin_max, 0)
+	# Calculate reference error this will be zeros)
+	Error_BB = CalcSymbolError(Ref_BB, Ref_BB)
 
 	# Start sample for FFT should be in the center of the cyclic prefix
 
 	# This fudge factor picks the first sample after the cyclic prefix.
-	fudge = cp_n +1
+	fudge = cp_n //2
 
 	sg = [[0,1],[0,2],[1,1],[1,2]]
 	for SC_Peak_Sample in Sync_List:
@@ -378,40 +384,49 @@ def main():
 
 
 		Sym_BB = []
+		Sym_BB_Eq = []
 		for sym_i in range(4):
 			Sym_BB.append(np.fft.fft(baseband_samples[Start_i:Start_i + fft_n])*bin_n/fft_n)
 			Start_i += (fft_n + cp_n)
+			
+				
 		
 			ax[sg[sym_i][0],sg[sym_i][1]].set_title(f'Symbol {sym_i}')
 			ax[sg[sym_i][0],sg[sym_i][1]].set_xlim(-1.5,1.5)
 			ax[sg[sym_i][0],sg[sym_i][1]].set_ylim(-1.5,1.5)
 			ax[sg[sym_i][0],sg[sym_i][1]].grid(True)
 		
-			# Plot the unequalized subcarrier I/Q
+			# Plot the unequalized subcarrier I/Q in grey
 			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB[sym_i][bin_0: bin_max+1].real,Sym_BB[sym_i][bin_0: bin_max+1].imag, color='grey', s=2)
 
 			# Plot the unequalized pilots
-			if sym_i > 0:
-				for pilot in pilots:
-					ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB[sym_i][pilot].real],[0,Sym_BB[sym_i][pilot].imag], color='green', linewidth=1)
+			for pilot in pilots:
+				ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB[sym_i][pilot].real],[0,Sym_BB[sym_i][pilot].imag], color='grey', linewidth=1)
 
 		# Collect equalization data from the Schmidle Cox preamble:
 		# Even indices contain channel noise measurement, odd contain channel response measurement
 		Error_BB = CalcSymbolError(Sym_BB[0],Ref_BB)
 
-		fft_freq = np.fft.fftfreq(fft_n, 1/audio_sample_rate)
-		fft_freq = fft_freq[:fft_n//2]
+		for sym_i in range(4):
+			Sym_BB_Eq.append(Sym_BB[sym_i] * Error_BB.conj())
+		
+			# Plot the equalized subcarrier I/Q in blue
+			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB_Eq[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq[sym_i][bin_0: bin_max+1].imag, color='blue', s=2)
+			
+			# Plot the equalized pilots
+			for pilot in pilots:
+				ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB_Eq[sym_i][pilot].real],[0,Sym_BB_Eq[sym_i][pilot].imag], color='blue', linewidth=1)
 
 
+		
 
 		ax[0,0].set_title('Channel Magnitude')
-		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Ref_BB[bin_0: bin_max+1]), s=2)
 		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Sym_BB[0][bin_0: bin_max+1]), s=2)
 		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Error_BB[bin_0: bin_max+1]), s=2)
 		ax[0,0].set_ylim(-0.5,2)
 		ax[1,0].set_title('Channel Phase')
-		ax[1,0].scatter(fft_freq[bin_0: bin_max+1],np.angle(Ref_BB[bin_0: bin_max+1]), s=2)
 		ax[1,0].scatter(fft_freq[bin_0: bin_max+1],np.angle(Sym_BB[0][bin_0: bin_max+1]), s=2)
+		ax[1,0].scatter(fft_freq[bin_0: bin_max+1],np.angle(Error_BB[bin_0: bin_max+1]), s=2)
 		ax[1,0].set_ylim(-3.5,3.5)
 
 		plt.show()
