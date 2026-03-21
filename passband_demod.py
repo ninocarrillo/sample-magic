@@ -46,7 +46,7 @@ def CalcSubcarrierError(symbol):
 	Error_Vector[32] = Error_Vector[33]
 	return Error_Vector
 
-def CalcSymbolError(rx_symbol, ref_symbol):
+def CalcEq(rx_symbol, ref_symbol):
 	error = ref_symbol.conj() * rx_symbol 
 	for i in range(len(error)):
 		if np.abs(error[i]) > 0:
@@ -419,7 +419,7 @@ def main():
 		# Calculate reference baseband from known SC Preamble data
 		Ref_BB = GenSCPreBB(fft_n, bin_0, bin_max, 0)
 		# Calculate reference error this will be zeros)
-		Error_BB = CalcSymbolError(Ref_BB, Ref_BB)
+		Eq_BB = CalcEq(Ref_BB, Ref_BB)
 		fig,ax = plt.subplots(2,3, figsize=(12,8))
 		plt.suptitle(f'Fudge: {fudge}, Burst: {SC_Peak_Sample}')
 		fig.tight_layout()
@@ -449,11 +449,11 @@ def main():
 
 		# Collect equalization data from the Schmidle Cox preamble:
 		# Even indices contain channel noise measurement, odd contain channel response measurement
-		Error_BB = CalcSymbolError(Sym_BB[0],Ref_BB)
-		#Error_BB = FilterInterpOddBB(Error_BB, bin_0, bin_max)
+		Eq_BB = CalcEq(Sym_BB[0],Ref_BB)
+		#Eq_BB = FilterInterpOddBB(Eq_BB, bin_0, bin_max)
 
 		for sym_i in range(4):
-			Sym_BB_Eq.append(Sym_BB[sym_i] * Error_BB.conj())
+			Sym_BB_Eq.append(Sym_BB[sym_i] * Eq_BB.conj())
 		
 			# Plot the equalized subcarrier I/Q in blue
 			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB_Eq[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq[sym_i][bin_0: bin_max+1].imag, color='red', s=2)
@@ -468,11 +468,13 @@ def main():
 
 		ax[0,0].set_title('Channel Magnitude')
 		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Sym_BB[0][bin_0: bin_max+1]), s=2, color='grey')
-		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Error_BB[bin_0: bin_max+1]), s=2, color='blue')
+		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Eq_BB[bin_0: bin_max+1]), s=2, color='blue')
+		ax[0,0].legend(['Preamble BB', 'Equalizer BB'])
 		ax[0,0].set_ylim(-0.5,2)
 		ax[1,0].set_title('Channel Phase')
 		ax[1,0].scatter(fft_freq[bin_0: bin_max+1],np.angle(Sym_BB[0][bin_0: bin_max+1]), s=2)
-		ax[1,0].scatter(fft_freq[bin_0: bin_max+1],np.angle(Error_BB[bin_0: bin_max+1]), s=2)
+		ax[1,0].scatter(fft_freq[bin_0: bin_max+1],np.angle(Eq_BB[bin_0: bin_max+1]), s=2)
+		ax[1,0].legend(['Preamble BB', 'Equalizer BB'])
 		ax[1,0].set_ylim(-3.5,3.5)
 
 		plt.show()
