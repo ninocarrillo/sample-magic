@@ -358,6 +358,7 @@ def main():
 	plt.show()
 
 
+	Ref_BB = GenSCPreBB(fft_n, bin_0, bin_max, 0)
 
 	# Start sample for FFT should be in the center of the cyclic prefix
 
@@ -375,7 +376,6 @@ def main():
 		Start_i -= (fft_n + cp_n)
 
 
-		Ref_BB = GenSCPreBB(fft_n, bin_0, bin_max, 0)
 
 		Sym_BB = []
 		for sym_i in range(4):
