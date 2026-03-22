@@ -14,24 +14,29 @@ from scipy.signal import savgol_filter
 def FilterInterpOddBB(symbol, start_i, end_i): 
 	# Interpolate from indicated indices, assuming data is only in odd indices
 	# work on magnitudes first
-	for i in range(start_i, end_i + 1):
-		if (i % 2) == 0:
-			# index is even, there is data here
-			pass
-		else:
-			# index is odd, interpolate
-			if i == start_i:
-				# the first sample is empty, interpolate linearly from the next two data points:
-				delta = np.abs(symbol[i+3]) - np.abs(symbol[i+1])
-				symbol[i] = symbol[i+1] - (delta / 2)
-			elif i == end_i:
-				# the last sample is empty, interpolate linearly from the previous two data points:
-				delta = np.abs(symbol[i-3]) - np.abs(symbol[i-1])
-				symbol[i] = np.abs(symbol[i-1]) - (delta / 2)
-			else:
-				# inner sample, interpolate between surrounding points:
-				symbol[i] = (np.abs(symbol[i-1]) + np.abs(symbol[i+1])) / 2
-	ma_filter_len = 15
+	if start_i % 2 == 1:
+		first_i = start_i + 1
+	else:
+		first_i = start_i
+	entry_slope = (np.abs(symbol[first_i+20]) - np.abs(symbol[first_i])) / 20
+	print(f'Entry Slope {entry_slope}')
+	if end_i % 2 == 1:
+		last_i = end_i - 1
+	else:
+		last_i = end_i
+	exit_slope = (np.abs(symbol[last_i]) - np.abs(symbol[last_i-20])) / 20
+	print(f'Exit Slope {exit_slope}')
+	for i in range(len(symbol)-1):
+		if i <= start_i:
+			# linear extrapolation:
+			symbol[i] = np.abs(symbol[first_i]) + (entry_slope * (start_i - i))
+		elif i >= end_i:
+			# linear extrapolation:
+			symbol[i] = np.abs(symbol[last_i]) + (exit_slope * (i - last_i))
+		elif (i % 2) == 1:
+			# inner sample, interpolate between surrounding points:
+			symbol[i] = (np.abs(symbol[i-1]) + np.abs(symbol[i+1])) / 2
+	ma_filter_len = 21
 	ma_filter = np.ones(ma_filter_len) / ma_filter_len
 	symbol_mag = np.convolve(ma_filter, np.abs(symbol), mode='full')
 	offset = len(ma_filter) // 2
