@@ -11,6 +11,20 @@ from scipy.fft import fft, fftfreq
 from scipy.signal import firwin
 from scipy.signal import savgol_filter
 
+
+#Eq_Channel, Eq_Time, Time_Offset = CalcTimeOffset(Eq_BB, bin_0, bin_max, fft_n, audio_sample_rate)
+def CalcTimeOffset(eq_taps, bin_0, bin_max, bin_spacing):
+	bin_n = (bin_max - bin_0) + 1
+	norm_phase_err = np.zeros(bin_n)
+	for i in range(bin_n):
+		norm_phase_err[i] = np.angle(eq_taps[i]) / (i + bin_0 - 1)
+
+	avg_norm_phase_err = np.average(norm_phase_err)
+	print(f'Equalizer time offset {avg_norm_phase_err:.4f} rad/bin, {1000*avg_norm_phase_err/(bin_spacing*2*np.pi):.4f} mS, ')
+	
+	
+	
+
 def FilterInterpOddBB(symbol, start_i, end_i): 
 	# Interpolate from indicated indices, assuming data is only in odd indices
 	# work on magnitudes first
@@ -276,7 +290,7 @@ def main():
 	P1_Norm = np.zeros(d_range)
 	for d in range(d_range):
 		x = np.power(R[d],2)
-		if R[d] > 0.1:
+		if R[d] > 0.05:
 			P1_Norm[d] = np.power(np.abs(P1_MA[d]), 2) / x
 			
 	P1_Derivative = np.zeros(d_range - 1)
@@ -366,7 +380,7 @@ def main():
 	# Start sample for FFT should be in the center of the cyclic prefix
 
 	fudge = cp_n //2
-
+	
 	sg = [[0,1],[0,2],[1,1],[1,2]]
 
 
@@ -412,6 +426,8 @@ def main():
 		Avg_SNR_Lin += SNR_lin
 		SNR_dB = 20*np.log10(SNR_lin)
 		Eq_BB = FilterInterpOddBB(Eq_BB, bin_0, bin_max)
+		#Eq_Channel, Eq_Time, Time_Offset = CalcTimeOffset(Eq_BB, bin_0, bin_max, fft_n, audio_sample_rate)
+		CalcTimeOffset(Eq_BB, bin_0, bin_max, bin_width)
 
 		for sym_i in range(4):
 			Sym_BB_Eq.append(Sym_BB[sym_i] * Eq_BB.conj())
