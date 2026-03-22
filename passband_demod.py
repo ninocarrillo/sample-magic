@@ -15,11 +15,11 @@ def FilterInterpOddBB(symbol, start_i, end_i):
 	# Interpolate from indicated indices, assuming data is only in odd indices
 	# work on magnitudes first
 	for i in range(start_i, end_i + 1):
-		if i % 2:
-			# index is odd, there is data here
+		if (i % 2) == 0:
+			# index is even, there is data here
 			pass
 		else:
-			# index is even, interpolate
+			# index is odd, interpolate
 			if i == start_i:
 				# the first sample is empty, interpolate linearly from the next two data points:
 				delta = np.abs(symbol[i+3]) - np.abs(symbol[i+1])
@@ -31,19 +31,29 @@ def FilterInterpOddBB(symbol, start_i, end_i):
 			else:
 				# inner sample, interpolate between surrounding points:
 				symbol[i] = (np.abs(symbol[i-1]) + np.abs(symbol[i+1])) / 2
-		print(f'Index: {i}, {symbol[i]}')
-
 	return symbol
 
 def CalcEq(rx_symbol, ref_symbol):
-	error = ref_symbol.conj() * rx_symbol 
-	for i in range(len(error)):
-		if np.abs(error[i]) > 0:
-			error[i] = error[i] / np.power(np.abs(error[i]),2)
+	sig_e = 0
+	noise_e = 0
+	eq = ref_symbol.conj() * rx_symbol 
+	for i in range(len(eq)):
+		if np.abs(eq[i]) > 0:
+			eq[i] = eq[i] / np.power(np.abs(eq[i]),2)
 		else:
-			#error[i] = 1
+			eq[i] = 1
 			pass
-	return error
+		if i % 2 == 1:
+			# Odd subcarrier, only noise
+			noise_e += np.power(np.abs(rx_symbol[i]),2)
+		else:
+			# Even subcarrier, signal here
+			sig_e += np.power(np.abs(rx_symbol[i]),2)
+	if noise_e > 0:
+		snr = sig_e / noise_e
+	else:
+		snr = 1e6
+	return eq, snr
 
 def PlotPilots(start_carrier, end_carrier, pilot_count):
 	pilot_indicies = []
@@ -226,7 +236,7 @@ def main():
 	P1_Norm = np.zeros(d_range)
 	for d in range(d_range):
 		x = np.power(R[d],2)
-		if R[d] > 0.01:
+		if R[d] > 0.1:
 			P1_Norm[d] = np.power(np.abs(P1_MA[d]), 2) / x
 			
 	P1_Derivative = np.zeros(d_range - 1)
@@ -316,7 +326,7 @@ def main():
 	# Start sample for FFT should be in the center of the cyclic prefix
 
 	# This fudge factor picks the first sample after the cyclic prefix.
-	fudge = cp_n 
+	fudge = cp_n //2
 
 	sg = [[0,1],[0,2],[1,1],[1,2]]
 
@@ -354,8 +364,9 @@ def main():
 
 		# Collect equalization data from the Schmidle Cox preamble:
 		# Even indices contain channel noise measurement, odd contain channel response measurement
-		Eq_BB = CalcEq(Sym_BB[0],Ref_BB)
-		#Eq_BB = FilterInterpOddBB(Eq_BB, bin_0, bin_max)
+		Eq_BB, SNR = CalcEq(Sym_BB[0],Ref_BB)
+		print(f'SNR: {20*np.log10(SNR):.0f} dB')
+		Eq_BB = FilterInterpOddBB(Eq_BB, bin_0, bin_max)
 
 		for sym_i in range(4):
 			Sym_BB_Eq.append(Sym_BB[sym_i] * Eq_BB.conj())
@@ -373,13 +384,14 @@ def main():
 
 		ax[0,0].set_title('Channel Magnitude')
 		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Sym_BB[0][bin_0: bin_max+1]), s=2, color='grey')
-		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Eq_BB[bin_0: bin_max+1]), s=2, color='blue')
-		ax[0,0].legend(['Preamble BB', 'Equalizer BB'])
-		ax[0,0].set_ylim(-0.5,2)
+		ax[0,0].plot(fft_freq[bin_0: bin_max+1],np.abs(Eq_BB[bin_0: bin_max+1]), linewidth=2, color='blue')
+		ax[0,0].legend(['Preamble', 'Equalizer'])
+		ax[0,0].set_ylim(-0.5,2.5)
+		ax[0,0].grid(True)
 		ax[1,0].set_title('Channel Phase')
 		ax[1,0].scatter(fft_freq[bin_0: bin_max+1],np.angle(Sym_BB[0][bin_0: bin_max+1]), s=2)
 		ax[1,0].scatter(fft_freq[bin_0: bin_max+1],np.angle(Eq_BB[bin_0: bin_max+1]), s=2)
-		ax[1,0].legend(['Preamble BB', 'Equalizer BB'])
+		ax[1,0].legend(['Preamble', 'Equalizer'])
 		ax[1,0].set_ylim(-3.5,3.5)
 
 		plt.show()
