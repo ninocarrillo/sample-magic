@@ -45,12 +45,11 @@ def FilterInterpOddBB(symbol, start_i, end_i):
 	mags = mags[offset:offset + len(symbol)]
 	
 	# Interpolate phase component
-	# First make known phase data continuous by removing cyclic discontinuities
 	last_phase = 0
-	angles = np.unwrap(np.angle(symbol))
+	angles = np.angle(symbol)
 	# Now interpolate and extrapolate
-	entry_slope = (angles[first_i+10] - angles[first_i]) / 10
-	exit_slope = (angles[last_i] - angles[last_i-10]) / 10
+	entry_slope = (angles[first_i+2] - angles[first_i]) / 2
+	exit_slope = (angles[last_i] - angles[last_i-2]) / 2
 	for i in range(len(symbol)-1):
 		if i <= start_i:
 			# linear extrapolation:
@@ -60,11 +59,15 @@ def FilterInterpOddBB(symbol, start_i, end_i):
 			angles[i] = angles[last_i] + (exit_slope * (i - last_i))
 		elif i % 2:
 			# inner sample, interpolate between surrounding points:
-			angles[i] = (angles[i-1] + angles[i+1]) / 2
-		
-	
-	#angles = np.convolve(ma_filter, angles, mode='full')
-	#angles = angles[offset:offset + len(symbol)]
+			# make sure the interpolation samples are continuous
+			s0 = angles[i-1]
+			s1 = angles[i+1]
+			while (s0-s1) > np.pi:
+				s1 += 2*np.pi
+			while (s1-s0) > np.pi:
+				s0 += 2*np.pi
+
+			angles[i] = (s0 + s1) / 2
 
 	for i in range(len(symbol)):
 		symbol[i] = mags[i] * np.exp(1j * angles[i])
@@ -372,7 +375,7 @@ def main():
 		# Calculate reference error this will be zeros)
 		Eq_BB = CalcEq(Ref_BB, Ref_BB)
 		fig,ax = plt.subplots(2,3, figsize=(12,8), layout='constrained')
-		plt.suptitle(f'Fudge: {fudge}, Burst: {SC_Peak_Sample}')
+		plt.suptitle(f'Sample start: {SC_Peak_Sample}')
 		#fig.tight_layout()
 
 		SC_Offset = (2 * L) + fudge
@@ -420,7 +423,7 @@ def main():
 
 		ax[0,0].set_title(f'Channel Magnitude\nPreamble SNR: {SNR_dB:.1f} dB')
 		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Sym_BB[0][bin_0: bin_max+1]), s=2, color='grey')
-		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Eq_BB[bin_0: bin_max+1]), s=2, color='blue')
+		ax[0,0].plot(fft_freq[bin_0: bin_max+1],np.abs(Eq_BB[bin_0: bin_max+1]), linewidth=2, color='blue')
 		ax[0,0].legend(['Preamble', 'Equalizer'])
 		ax[0,0].set_ylim(-0.5,2.5)
 		ax[0,0].grid(True)
@@ -428,7 +431,7 @@ def main():
 		ax[1,0].set_title('Channel Phase')
 		#ax[1,0].scatter(fft_freq[bin_0: bin_max+1],np.angle(Sym_BB[0][bin_0: bin_max+1]), s=2)
 		#ax[1,0].plot(fft_freq[bin_0: bin_max+1],np.angle(Eq_BB[bin_0: bin_max+1]), linewidth=2)
-		ax[1,0].plot(np.angle(Eq_BB[bin_0:bin_max+1]),fft_freq[bin_0:bin_max+1])
+		ax[1,0].plot(np.angle(Eq_BB[bin_0:bin_max+1]),fft_freq[bin_0:bin_max+1], linewidth=2)
 		ax[1,0].legend(['Equalizer'])
 		#ax[1,0].set_ylim(-3.5,3.5)
 		ax[1,0].grid(True)
