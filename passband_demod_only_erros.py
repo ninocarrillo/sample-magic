@@ -11,20 +11,6 @@ from scipy.fft import fft, fftfreq
 from scipy.signal import firwin
 from scipy.signal import savgol_filter
 
-
-#Eq_Channel, Eq_Time, Time_Offset = CalcTimeOffset(Eq_BB, bin_0, bin_max, fft_n, audio_sample_rate)
-def CalcTimeOffset(eq_taps, bin_0, bin_max, bin_spacing):
-	bin_n = (bin_max - bin_0) + 1
-	norm_phase_err = np.zeros(bin_n)
-	for i in range(bin_n):
-		norm_phase_err[i] = np.angle(eq_taps[i]) / (i + bin_0 - 1)
-
-	avg_norm_phase_err = np.average(norm_phase_err)
-	print(f'Equalizer time offset {avg_norm_phase_err:.4f} rad/bin, {1000*avg_norm_phase_err/(bin_spacing*2*np.pi):.4f} mS, ')
-	
-	
-	
-
 def FilterInterpOddBB(symbol, start_i, end_i): 
 	# Interpolate from indicated indices, assuming data is only in odd indices
 	# work on magnitudes first
@@ -208,7 +194,7 @@ def main():
 	bin_max = int(sys.argv[6])
 	bin_n = (bin_max-bin_0) + 1
 
-	pilot_n = 4
+	pilot_n = 8
 	pilots = PlotPilots(bin_0, bin_max, pilot_n)
 
 	try:
@@ -380,7 +366,7 @@ def main():
 	# Start sample for FFT should be in the center of the cyclic prefix
 
 	fudge = cp_n //2
-	
+
 	sg = [[0,1],[0,2],[1,1],[1,2]]
 
 
@@ -393,9 +379,6 @@ def main():
 		Ref_BB = GenSCPreBB(fft_n, bin_0, bin_max, 0)
 		# Calculate reference error this will be zeros)
 		Eq_BB = CalcEq(Ref_BB, Ref_BB)
-		fig,ax = plt.subplots(2,3, figsize=(12,8), layout='constrained')
-		plt.suptitle(f'Sample start: {SC_Peak_Sample}')
-		#fig.tight_layout()
 
 		SC_Offset = (2 * L) + fudge
 		Start_i = SC_Peak_Sample + SC_Offset
@@ -407,18 +390,6 @@ def main():
 			Sym_BB.append(np.fft.fft(baseband_samples[Start_i:Start_i + fft_n])*bin_n/fft_n)
 			Start_i += (fft_n + cp_n)
 		
-			ax[sg[sym_i][0],sg[sym_i][1]].set_title(f'Symbol {sym_i}')
-			ax[sg[sym_i][0],sg[sym_i][1]].set_xlim(-1.5,1.5)
-			ax[sg[sym_i][0],sg[sym_i][1]].set_ylim(-1.5,1.5)
-			ax[sg[sym_i][0],sg[sym_i][1]].grid(True)
-		
-			# Plot the unequalized subcarrier I/Q in grey
-			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB[sym_i][bin_0: bin_max+1].real,Sym_BB[sym_i][bin_0: bin_max+1].imag, color='grey', s=1)
-
-			# Plot the unequalized pilots
-			if sym_i > 0: # no pilots in preamble
-				for p in pilots:
-					ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB[sym_i][p[0]].real],[0,Sym_BB[sym_i][p[0]].imag], color='grey', linewidth=1)
 
 		# Collect equalization data from the Schmidle Cox preamble:
 		# Even indices contain channel noise measurement, odd contain channel response measurement
@@ -426,36 +397,14 @@ def main():
 		Avg_SNR_Lin += SNR_lin
 		SNR_dB = 20*np.log10(SNR_lin)
 		Eq_BB = FilterInterpOddBB(Eq_BB, bin_0, bin_max)
-		#Eq_Channel, Eq_Time, Time_Offset = CalcTimeOffset(Eq_BB, bin_0, bin_max, fft_n, audio_sample_rate)
-		CalcTimeOffset(Eq_BB, bin_0, bin_max, bin_width)
 
 		for sym_i in range(4):
-			Sym_BB_Eq.append(Sym_BB[sym_i] * Eq_BB.conj())
-		
-			# Plot the equalized subcarrier I/Q in blue
-			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB_Eq[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq[sym_i][bin_0: bin_max+1].imag, color='red', s=2)
-			
-			# Plot the equalized pilots
-			for p in pilots:
-				if sym_i > 0: # no pilots in preamble
-					ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB_Eq[sym_i][p[0]].real],[0,Sym_BB_Eq[sym_i][p[0]].imag], color='blue', linewidth=1)
-
-
+			try:
+				Sym_BB_Eq.append(Sym_BB[sym_i] * Eq_BB.conj())
+			except:
+				pass
 		
 
-		ax[0,0].set_title(f'Channel Magnitude\nPreamble SNR: {SNR_dB:.1f} dB')
-		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Sym_BB[0][bin_0: bin_max+1]), s=2, color='grey')
-		ax[0,0].plot(fft_freq[bin_0: bin_max+1],np.abs(Eq_BB[bin_0: bin_max+1]), linewidth=2, color='blue')
-		ax[0,0].legend(['Preamble', 'Equalizer'])
-		ax[0,0].set_ylim(-0.5,3.5)
-		ax[0,0].grid(True)
-		ax[1,0] = fig.add_subplot(2,3,4, projection='polar')
-		ax[1,0].set_title('Channel Phase')
-		ax[1,0].plot(np.angle(Eq_BB[bin_0:bin_max+1]),fft_freq[bin_0:bin_max+1], linewidth=2)
-		ax[1,0].legend(['Equalizer'])
-		ax[1,0].grid(True)
-
-		plt.show()
 
 		# Accumulate error data
 		# create a list of pilot indices
@@ -488,12 +437,10 @@ def main():
 	ax[0].scatter(Error_Freqs,100*Error_Mags/Error_Sym_n, s=6)
 	ax[0].set_ylabel('Absolute Magnitude Error, %')
 	ax[0].set_xlabel('Frequency, Hz')
-	ax[0].set_ylim(0,50)
 	ax[0].grid(True)
 	ax[1].set_title(f'Angle Error')
 	ax[1].scatter(Error_Freqs,Error_Angles/Error_Sym_n, s=6)
 	ax[1].set_ylabel('Absolute Angle Error, Deg')
-	ax[1].set_ylim(0,45)
 	ax[1].set_xlabel('Frequency, Hz')
 	ax[1].grid(True)
 	plt.show()
