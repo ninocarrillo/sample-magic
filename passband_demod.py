@@ -371,9 +371,9 @@ def main():
 		Ref_BB = GenSCPreBB(fft_n, bin_0, bin_max, 0)
 		# Calculate reference error this will be zeros)
 		Eq_BB = CalcEq(Ref_BB, Ref_BB)
-		fig,ax = plt.subplots(2,3, figsize=(12,8))
+		fig,ax = plt.subplots(2,3, figsize=(12,8), layout='constrained')
 		plt.suptitle(f'Fudge: {fudge}, Burst: {SC_Peak_Sample}')
-		fig.tight_layout()
+		#fig.tight_layout()
 
 		SC_Offset = (2 * L) + fudge
 		Start_i = SC_Peak_Sample + SC_Offset
@@ -400,8 +400,8 @@ def main():
 
 		# Collect equalization data from the Schmidle Cox preamble:
 		# Even indices contain channel noise measurement, odd contain channel response measurement
-		Eq_BB, SNR = CalcEq(Sym_BB[0],Ref_BB)
-		print(f'SNR: {20*np.log10(SNR):.0f} dB')
+		Eq_BB, SNR_lin = CalcEq(Sym_BB[0],Ref_BB)
+		SNR_dB = 20*np.log10(SNR_lin)
 		Eq_BB = FilterInterpOddBB(Eq_BB, bin_0, bin_max)
 
 		for sym_i in range(4):
@@ -418,17 +418,20 @@ def main():
 
 		
 
-		ax[0,0].set_title('Channel Magnitude')
+		ax[0,0].set_title(f'Channel Magnitude\nPreamble SNR: {SNR_dB:.1f} dB')
 		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Sym_BB[0][bin_0: bin_max+1]), s=2, color='grey')
 		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Eq_BB[bin_0: bin_max+1]), s=2, color='blue')
 		ax[0,0].legend(['Preamble', 'Equalizer'])
 		ax[0,0].set_ylim(-0.5,2.5)
 		ax[0,0].grid(True)
+		ax[1,0] = fig.add_subplot(2,3,4, projection='polar')
 		ax[1,0].set_title('Channel Phase')
-		ax[1,0].scatter(fft_freq[bin_0: bin_max+1],np.angle(Sym_BB[0][bin_0: bin_max+1]), s=2)
-		ax[1,0].scatter(fft_freq[bin_0: bin_max+1],np.angle(Eq_BB[bin_0: bin_max+1]), s=2)
-		ax[1,0].legend(['Preamble', 'Equalizer'])
+		#ax[1,0].scatter(fft_freq[bin_0: bin_max+1],np.angle(Sym_BB[0][bin_0: bin_max+1]), s=2)
+		#ax[1,0].plot(fft_freq[bin_0: bin_max+1],np.angle(Eq_BB[bin_0: bin_max+1]), linewidth=2)
+		ax[1,0].plot(np.angle(Eq_BB[bin_0:bin_max+1]),fft_freq[bin_0:bin_max+1])
+		ax[1,0].legend(['Equalizer'])
 		#ax[1,0].set_ylim(-3.5,3.5)
+		ax[1,0].grid(True)
 
 		plt.show()
 
