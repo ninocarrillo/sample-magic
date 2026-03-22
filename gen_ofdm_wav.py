@@ -181,6 +181,8 @@ def main():
 	audio_samples = np.concatenate([audio_samples, GenRandomQPSK(fft_n, cp_n, bin_0, bin_0+bin_n, pilots)])
 	audio_samples = np.concatenate([audio_samples, GenRandomQPSK(fft_n, cp_n, bin_0, bin_0+bin_n, pilots)])
 	audio_samples = np.concatenate([audio_samples, GenRandomQPSK(fft_n, cp_n, bin_0, bin_0+bin_n, pilots)])
+	audio_samples = np.concatenate([audio_samples, np.zeros(fft_n+cp_n)])
+	
 
 	audio_samples = np.tile(audio_samples, repeat_n)
 

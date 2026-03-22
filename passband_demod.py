@@ -35,17 +35,6 @@ def FilterInterpOddBB(symbol, start_i, end_i):
 
 	return symbol
 
-def CalcSubcarrierError(symbol):
-	FRS_Phase = [135,-90,45,135,-45,45,-45,0,-45,135,-45,45,135,-135,45,-45,135,-45,-45,135,-135,0,-45,-45,-135,-135,-45,-45,-135,45,-135,45,135,135,-135,135,-135,45,-45,-45,135,-45,45,0,-135,-135,135,135,-45,45,45,-45,-135,-135,45,-45,45,-180,-45,-135,-135,45,-135,-135]
-	FRS_Symbol = np.exp(np.multiply(1j*np.pi/180,FRS_Phase))
-	Error_Vector = FRS_Symbol.conj() * symbol
-	Error_Vector = Error_Vector * (1/np.power(np.abs(Error_Vector),2))
-	# Remove data for empty subcarriers
-	Error_Vector[0] = Error_Vector[2]
-	Error_Vector[1] = Error_Vector[2]
-	Error_Vector[32] = Error_Vector[33]
-	return Error_Vector
-
 def CalcEq(rx_symbol, ref_symbol):
 	error = ref_symbol.conj() * rx_symbol 
 	for i in range(len(error)):
@@ -97,90 +86,6 @@ def SmoothSymbol(symbol, freq):
 
 	return final_symbol
 
-def SelectSubcarriers(symbol):
-	sel_symbol = symbol[48:81]
-	sel_symbol = np.concatenate([sel_symbol,symbol[17:48]])
-	return sel_symbol
-
-def PadBasebandZeros(symbol, rate):
-	padded_symbol = np.zeros(len(symbol) * rate, dtype='complex')
-	for i in range(len(symbol)):
-		padded_symbol[i] = symbol[i]
-	return padded_symbol
-
-	
-def CalcPilotError(symbol, bb_fs, oversample):
-	p0 = 7 # 0 Phase
-	p1 = 21 # 0 Phase
-	p2 = 43 # 0 Phase
-	p3 = 57 # 180 Phase
-	
-	# Calculate phase error of each pilot in fine ranging symbol
-	p0_err = np.angle(symbol[p0], deg=True)
-	p1_err = np.angle(symbol[p1], deg=True)
-	p2_err = -np.angle(symbol[p2], deg=True)
-	p3_err = -180-np.angle(symbol[p3], deg=True)
-	while p3_err <= -180:
-		p3_err += 360
-	while p3_err > 180:
-		p3_err -= 360
-	while p2_err <= -180:
-		p2_err += 360
-	while p2_err > 180:
-		p2_err -= 360
-	while p1_err <= -180:
-		p1_err += 360
-	while p1_err > 180:
-		p1err -= 360
-	while p0_err <= -180:
-		p0_err += 360
-	while p0_err > 180:
-		p0_err -= 360
-		
-	# Normalize phase error to subcarrier index position
-	p0_err_norm = p0_err / (p0+1)
-	p1_err_norm = p1_err / (p1+1)
-	p2_err_norm = p2_err / (64-p2)
-	p3_err_norm = p3_err / (64-p3)
-
-	fine_range_exact = np.average([p0_err_norm, p1_err_norm, p2_err_norm, p3_err_norm]) # degrees per subcarrier
-
-	# convert the fine range estimate to time units
-	print(f'Baseband Sample Rate: {bb_fs} Hz')
-	bin_spacing = bb_fs / (len(symbol) * oversample)
-	print(f'Bin spacing: {bin_spacing} Hz')
-	time_offset = fine_range_exact / (bin_spacing * 360)
-	pilot_sample_offset = time_offset * bb_fs
-	print(f'Sample time offset: {time_offset * 1e3:.2f} ms, {pilot_sample_offset:.2f} samples')
-
-
-	print(f'Pilot 0 Error: {p0_err:.2f} deg, {p0_err_norm:.2f} deg/sub')
-	print(f'Pilot 1 Error: {p1_err:.2f} deg, {p1_err_norm:.2f} deg/sub')
-	print(f'Pilot 2 Error: {p2_err:.2f} deg, {p2_err_norm:.2f} deg/sub')
-	print(f'Pilot 3 Error: {p3_err:.2f} deg, {p3_err_norm:.2f} deg/sub')
-	print(f'Average pilot error: {fine_range_exact:.2f} deg/sub')
-	
-	fft_n = len(symbol)
-	Phase_Error = np.zeros(fft_n)
-	Feedback_Gain = 0.75
-	for i in range(fft_n):
-		if i < fft_n/2:
-			Phase_Error[i] =  (i + 1) * time_offset * (bin_spacing * 360) * Feedback_Gain
-		else:
-			Phase_Error[i] = -(fft_n - i) * time_offset * (bin_spacing * 360) * Feedback_Gain
-	
-	Error_Vector = np.exp(np.multiply(1j*np.pi/180,Phase_Error))
-			
-	
-	
-	return pilot_sample_offset, Error_Vector
-
-def AvgSubcarriers(symbol, carrier_list):
-	y = 0j
-	for i in carrier_list:
-		y += symbol[i]
-	return y / len(carrier_list)
-	
 def AnalyzeSpectrum(waveform, sample_rate, power_ratio):
 	fft_n = len(waveform)
 	time_step = 1 / sample_rate
@@ -440,12 +345,12 @@ def main():
 			ax[sg[sym_i][0],sg[sym_i][1]].grid(True)
 		
 			# Plot the unequalized subcarrier I/Q in grey
-			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB[sym_i][bin_0: bin_max+1].real,Sym_BB[sym_i][bin_0: bin_max+1].imag, color='grey', s=4)
+			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB[sym_i][bin_0: bin_max+1].real,Sym_BB[sym_i][bin_0: bin_max+1].imag, color='grey', s=1)
 
 			# Plot the unequalized pilots
 			if sym_i > 0: # no pilots in preamble
 				for p in pilots:
-					ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB[sym_i][p[0]].real],[0,Sym_BB[sym_i][p[0]].imag], color='grey', linewidth=4)
+					ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB[sym_i][p[0]].real],[0,Sym_BB[sym_i][p[0]].imag], color='grey', linewidth=1)
 
 		# Collect equalization data from the Schmidle Cox preamble:
 		# Even indices contain channel noise measurement, odd contain channel response measurement
