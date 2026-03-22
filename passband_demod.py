@@ -435,11 +435,8 @@ def main():
 		ax[0,0].grid(True)
 		ax[1,0] = fig.add_subplot(2,3,4, projection='polar')
 		ax[1,0].set_title('Channel Phase')
-		#ax[1,0].scatter(fft_freq[bin_0: bin_max+1],np.angle(Sym_BB[0][bin_0: bin_max+1]), s=2)
-		#ax[1,0].plot(fft_freq[bin_0: bin_max+1],np.angle(Eq_BB[bin_0: bin_max+1]), linewidth=2)
 		ax[1,0].plot(np.angle(Eq_BB[bin_0:bin_max+1]),fft_freq[bin_0:bin_max+1], linewidth=2)
 		ax[1,0].legend(['Equalizer'])
-		#ax[1,0].set_ylim(-3.5,3.5)
 		ax[1,0].grid(True)
 
 		plt.show()
