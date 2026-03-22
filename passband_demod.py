@@ -337,7 +337,6 @@ def main():
 
 	# Start sample for FFT should be in the center of the cyclic prefix
 
-	# This fudge factor picks the first sample after the cyclic prefix.
 	fudge = cp_n //2
 
 	sg = [[0,1],[0,2],[1,1],[1,2]]
