@@ -31,6 +31,13 @@ def FilterInterpOddBB(symbol, start_i, end_i):
 			else:
 				# inner sample, interpolate between surrounding points:
 				symbol[i] = (np.abs(symbol[i-1]) + np.abs(symbol[i+1])) / 2
+	ma_filter_len = 15
+	ma_filter = np.ones(ma_filter_len) / ma_filter_len
+	symbol_mag = np.convolve(ma_filter, np.abs(symbol), mode='full')
+	offset = len(ma_filter) // 2
+	symbol_mag = symbol_mag[offset:offset + len(symbol)]
+	for i in range(len(symbol)):
+		symbol[i] = symbol_mag[i] * np.exp(1j * np.angle(symbol[i]))
 	return symbol
 
 def CalcEq(rx_symbol, ref_symbol):
