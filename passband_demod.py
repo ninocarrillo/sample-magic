@@ -369,6 +369,11 @@ def main():
 
 	sg = [[0,1],[0,2],[1,1],[1,2]]
 
+
+	Error_Mags = np.zeros(bin_n)
+	Error_Angles = np.zeros(bin_n)
+	Avg_SNR_Lin = 0
+
 	for SC_Peak_Sample in Sync_List:
 		# Calculate reference baseband from known SC Preamble data
 		Ref_BB = GenSCPreBB(fft_n, bin_0, bin_max, 0)
@@ -404,6 +409,7 @@ def main():
 		# Collect equalization data from the Schmidle Cox preamble:
 		# Even indices contain channel noise measurement, odd contain channel response measurement
 		Eq_BB, SNR_lin = CalcEq(Sym_BB[0],Ref_BB)
+		Avg_SNR_Lin += SNR_lin
 		SNR_dB = 20*np.log10(SNR_lin)
 		Eq_BB = FilterInterpOddBB(Eq_BB, bin_0, bin_max)
 
@@ -437,6 +443,46 @@ def main():
 		ax[1,0].grid(True)
 
 		plt.show()
+
+		# Accumulate error data
+		# create a list of pilot indices
+		p_i = []
+		for p in pilots:
+			p_i.append(p[0])
+
+		for sym_i in range(1,4,1):
+			i = 0
+			for bin_i in range(bin_0,bin_max+1,1):
+				Error_Mags[i] += np.abs((np.abs(Sym_BB_Eq[sym_i][bin_i]) - 1))
+				if bin_i in p_i:
+					angle_tgt = 90
+				else:
+					angle_tgt = 45
+				ea = np.abs(np.angle(Sym_BB_Eq[sym_i][bin_i], deg=True) - angle_tgt)
+				while(ea > 45):
+					ea -= 90
+				Error_Angles[i] += abs(ea)
+				i += 1
+
+	Avg_SNR_Lin /= len(Sync_List)
+	Avg_SNR_dB = 20*np.log10(SNR_lin)
+
+	Error_Freqs = fft_freq[bin_0:bin_max+1]
+	Error_Sym_n = 3 * len(Sync_List)
+	fig,ax = plt.subplots(1,2, layout='constrained')
+	plt.suptitle(f'Error Analysis over {Error_Sym_n} Symbols\nMeasured SNR: {Avg_SNR_dB:.1f} dB')
+	ax[0].set_title(f'Magnitude Error')
+	ax[0].scatter(Error_Freqs,Error_Mags/Error_Sym_n, s=6)
+	ax[0].set_ylabel('Absolute Magnitude Error')
+	ax[0].set_xlabel('Frequency, Hz')
+	ax[0].grid(True)
+	ax[1].set_title(f'Angle Error')
+	ax[1].scatter(Error_Freqs,Error_Angles/Error_Sym_n, s=6)
+	ax[1].set_ylabel('Absolute Angle Error, Deg')
+	ax[1].set_xlabel('Frequency, Hz')
+	ax[1].grid(True)
+	plt.show()
+
 
 
 
