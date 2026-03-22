@@ -18,31 +18,56 @@ def FilterInterpOddBB(symbol, start_i, end_i):
 		first_i = start_i + 1
 	else:
 		first_i = start_i
-	entry_slope = (np.abs(symbol[first_i+20]) - np.abs(symbol[first_i])) / 20
-	print(f'Entry Slope {entry_slope}')
+	entry_slope = (np.abs(symbol[first_i+10]) - np.abs(symbol[first_i])) / 10
 	if end_i % 2 == 1:
 		last_i = end_i - 1
 	else:
 		last_i = end_i
-	exit_slope = (np.abs(symbol[last_i]) - np.abs(symbol[last_i-20])) / 20
-	print(f'Exit Slope {exit_slope}')
+	exit_slope = (np.abs(symbol[last_i]) - np.abs(symbol[last_i-10])) / 10
+
+	mags = np.zeros(len(symbol))
 	for i in range(len(symbol)-1):
 		if i <= start_i:
 			# linear extrapolation:
-			symbol[i] = np.abs(symbol[first_i]) + (entry_slope * (start_i - i))
+			mags[i] = np.abs(symbol[first_i]) + (entry_slope * (start_i - i))
 		elif i >= end_i:
 			# linear extrapolation:
-			symbol[i] = np.abs(symbol[last_i]) + (exit_slope * (i - last_i))
-		elif (i % 2) == 1:
+			mags[i] = np.abs(symbol[last_i]) + (exit_slope * (i - last_i))
+		elif i % 2:
 			# inner sample, interpolate between surrounding points:
-			symbol[i] = (np.abs(symbol[i-1]) + np.abs(symbol[i+1])) / 2
-	ma_filter_len = 21
+			mags[i] = (np.abs(symbol[i-1]) + np.abs(symbol[i+1])) / 2
+		else:
+			mags[i] = np.abs(symbol[i])
+	ma_filter_len = 11
 	ma_filter = np.ones(ma_filter_len) / ma_filter_len
-	symbol_mag = np.convolve(ma_filter, np.abs(symbol), mode='full')
+	mags = np.convolve(ma_filter, mags, mode='full')
 	offset = len(ma_filter) // 2
-	symbol_mag = symbol_mag[offset:offset + len(symbol)]
+	mags = mags[offset:offset + len(symbol)]
+	
+	# Interpolate phase component
+	# First make known phase data continuous by removing cyclic discontinuities
+	last_phase = 0
+	angles = np.unwrap(np.angle(symbol))
+	# Now interpolate and extrapolate
+	entry_slope = (angles[first_i+10] - angles[first_i]) / 10
+	exit_slope = (angles[last_i] - angles[last_i-10]) / 10
+	for i in range(len(symbol)-1):
+		if i <= start_i:
+			# linear extrapolation:
+			angles[i] = angles[first_i] + (entry_slope * (start_i - i))
+		elif i >= end_i:
+			# linear extrapolation:
+			angles[i] = angles[last_i] + (exit_slope * (i - last_i))
+		elif i % 2:
+			# inner sample, interpolate between surrounding points:
+			angles[i] = (angles[i-1] + angles[i+1]) / 2
+		
+	
+	#angles = np.convolve(ma_filter, angles, mode='full')
+	#angles = angles[offset:offset + len(symbol)]
+
 	for i in range(len(symbol)):
-		symbol[i] = symbol_mag[i] * np.exp(1j * np.angle(symbol[i]))
+		symbol[i] = mags[i] * np.exp(1j * angles[i])
 	return symbol
 
 def CalcEq(rx_symbol, ref_symbol):
@@ -395,7 +420,7 @@ def main():
 
 		ax[0,0].set_title('Channel Magnitude')
 		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Sym_BB[0][bin_0: bin_max+1]), s=2, color='grey')
-		ax[0,0].plot(fft_freq[bin_0: bin_max+1],np.abs(Eq_BB[bin_0: bin_max+1]), linewidth=2, color='blue')
+		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Eq_BB[bin_0: bin_max+1]), s=2, color='blue')
 		ax[0,0].legend(['Preamble', 'Equalizer'])
 		ax[0,0].set_ylim(-0.5,2.5)
 		ax[0,0].grid(True)
@@ -403,7 +428,7 @@ def main():
 		ax[1,0].scatter(fft_freq[bin_0: bin_max+1],np.angle(Sym_BB[0][bin_0: bin_max+1]), s=2)
 		ax[1,0].scatter(fft_freq[bin_0: bin_max+1],np.angle(Eq_BB[bin_0: bin_max+1]), s=2)
 		ax[1,0].legend(['Preamble', 'Equalizer'])
-		ax[1,0].set_ylim(-3.5,3.5)
+		#ax[1,0].set_ylim(-3.5,3.5)
 
 		plt.show()
 
