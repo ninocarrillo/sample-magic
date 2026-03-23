@@ -218,8 +218,7 @@ def main():
 		sys.exit(3)
 
 	# Normalize audio amplitude
-	if audio_samples.dtype == np.int16:
-		audio_samples = audio_samples / 32767
+	audio_samples = audio_samples / max(np.abs(audio_samples))
 
 	audio_sample_count = len(audio_samples)
 	
