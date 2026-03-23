@@ -92,7 +92,6 @@ def CalcPilotError(symbol, bb_fs, oversample):
 
 def UpdateEqPilots(symbol, eq, pilots):
 	print(pilots)
-	print(len(pilots))
 	p_errors = np.zeros(len(pilots))
 	for i in range(len(pilots)):
 		p_errors[i] = np.angle(symbol[pilots[i][0]]) - np.angle(pilots[i][1]) % np.pi
@@ -601,7 +600,7 @@ def main():
 			
 			# Refine the equalizer time offset based on the pilots of the previous symbol:
 			if sym_i > 1:
-				Eq_BB = UpdateEqPilots(Sym_BB[sym_i - 1], Eq_BB, pilots)
+				Eq_BB = UpdateEqPilots(Sym_BB_Eq[sym_i - 1], Eq_BB, pilots)
 			
 			
 			Sym_BB_Eq.append(Sym_BB[sym_i] * Eq_BB.conj())
