@@ -12,7 +12,6 @@ from scipy.signal import firwin
 from scipy.signal import savgol_filter
 
 
-#Eq_Channel, Eq_Time, Time_Offset = CalcTimeOffset(Eq_BB, bin_0, bin_max, fft_n, audio_sample_rate)
 def CalcTimeOffset(eq_taps, bin_0, bin_max, bin_spacing):
 	bin_n = (bin_max - bin_0) + 1
 	norm_phase_err = np.zeros(bin_n)
@@ -21,23 +20,99 @@ def CalcTimeOffset(eq_taps, bin_0, bin_max, bin_spacing):
 
 	avg_norm_phase_err = np.average(norm_phase_err)
 	print(f'Equalizer time offset {avg_norm_phase_err:.4f} rad/bin, {1000*avg_norm_phase_err/(bin_spacing*2*np.pi):.4f} mS, ')
-	
-	
-	
 
+def CalcPilotError(symbol, bb_fs, oversample):
+	p0 = 7 # 0 Phase
+	p1 = 21 # 0 Phase
+	p2 = 43 # 0 Phase
+	p3 = 57 # 180 Phase
+	
+	# Calculate phase error of each pilot in fine ranging symbol
+	p0_err = np.angle(symbol[p0], deg=True)
+	p1_err = np.angle(symbol[p1], deg=True)
+	p2_err = -np.angle(symbol[p2], deg=True)
+	p3_err = -180-np.angle(symbol[p3], deg=True)
+	while p3_err <= -180:
+		p3_err += 360
+	while p3_err > 180:
+		p3_err -= 360
+	while p2_err <= -180:
+		p2_err += 360
+	while p2_err > 180:
+		p2_err -= 360
+	while p1_err <= -180:
+		p1_err += 360
+	while p1_err > 180:
+		p1err -= 360
+	while p0_err <= -180:
+		p0_err += 360
+	while p0_err > 180:
+		p0_err -= 360
+		
+	# Normalize phase error to subcarrier index position
+	p0_err_norm = p0_err / (p0+1)
+	p1_err_norm = p1_err / (p1+1)
+	p2_err_norm = p2_err / (64-p2)
+	p3_err_norm = p3_err / (64-p3)
+
+	fine_range_exact = np.average([p0_err_norm, p1_err_norm, p2_err_norm, p3_err_norm]) # degrees per subcarrier
+
+	# convert the fine range estimate to time units
+	print(f'Baseband Sample Rate: {bb_fs} Hz')
+	bin_spacing = bb_fs / (len(symbol) * oversample)
+	print(f'Bin spacing: {bin_spacing} Hz')
+	time_offset = fine_range_exact / (bin_spacing * 360)
+	pilot_sample_offset = time_offset * bb_fs
+	print(f'Sample time offset: {time_offset * 1e3:.2f} ms, {pilot_sample_offset:.2f} samples')
+
+
+	print(f'Pilot 0 Error: {p0_err:.2f} deg, {p0_err_norm:.2f} deg/sub')
+	print(f'Pilot 1 Error: {p1_err:.2f} deg, {p1_err_norm:.2f} deg/sub')
+	print(f'Pilot 2 Error: {p2_err:.2f} deg, {p2_err_norm:.2f} deg/sub')
+	print(f'Pilot 3 Error: {p3_err:.2f} deg, {p3_err_norm:.2f} deg/sub')
+	print(f'Average pilot error: {fine_range_exact:.2f} deg/sub')
+	
+	fft_n = len(symbol)
+	Phase_Error = np.zeros(fft_n)
+	Feedback_Gain = 0.75
+	for i in range(fft_n):
+		if i < fft_n/2:
+			Phase_Error[i] =  (i + 1) * time_offset * (bin_spacing * 360) * Feedback_Gain
+		else:
+			Phase_Error[i] = -(fft_n - i) * time_offset * (bin_spacing * 360) * Feedback_Gain
+	
+	Error_Vector = np.exp(np.multiply(1j*np.pi/180,Phase_Error))
+			
+	
+	
+	return pilot_sample_offset, Error_Vector
+
+
+
+
+def UpdateEqPilots(symbol, eq, pilots):
+	print(pilots)
+	print(len(pilots))
+	p_errors = np.zeros(len(pilots))
+	for i in range(len(pilots)):
+		p_errors[i] = np.angle(symbol[pilots[i][0]]) - np.angle(pilots[i][1]) % np.pi
+		#p_errors[i] = np.angle(pilots[i][1])
+	print(p_errors)
+	return eq
+	
 def FilterInterpOddBB2(symbol): 
-	# Interpolate from indicated indices, assuming data is only in odd indices
+	# Interpolate from indicated indices, assuming data is only in even indices
 	# work on magnitudes first
 
 	mags = np.abs(symbol)
-	for i in range(1,len(symbol)-1):
+	# set every odd position to zero
+	for i in range(len(mags)):
 		if i % 2:
-			# inner sample, interpolate between surrounding points:
-			mags[i] = (np.abs(symbol[i-1]) + np.abs(symbol[i+1])) / 2
-	ma_filter_len = 3
-	ma_filter = np.ones(ma_filter_len) / ma_filter_len
-	mags = np.convolve(ma_filter, mags, mode='full')
-	offset = len(ma_filter) // 2
+			mags[i] = 0
+	#interp_filter = np.array([.5,1,.5])
+	interp_filter = np.array([1/3,.5,1/3,.5,1/3])
+	mags = np.convolve(mags, interp_filter, mode='full')
+	offset = len(interp_filter) // 2
 	mags = mags[offset:offset + len(symbol)]
 	
 	angles = np.angle(symbol)
@@ -523,6 +598,12 @@ def main():
 		#CalcTimeOffset(Eq_BB, bin_0, bin_max, bin_width)
 
 		for sym_i in range(4):
+			
+			# Refine the equalizer time offset based on the pilots of the previous symbol:
+			if sym_i > 1:
+				Eq_BB = UpdateEqPilots(Sym_BB[sym_i - 1], Eq_BB, pilots)
+			
+			
 			Sym_BB_Eq.append(Sym_BB[sym_i] * Eq_BB.conj())
 		
 			# Plot the equalized subcarrier I/Q in blue
