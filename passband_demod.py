@@ -25,7 +25,7 @@ def CalcTimeOffset(eq_taps, bin_0, bin_max, bin_spacing):
 	
 	
 
-def FilterInterpOddBB2(symbol, start_i, end_i): 
+def FilterInterpOddBB2(symbol): 
 	# Interpolate from indicated indices, assuming data is only in odd indices
 	# work on magnitudes first
 
@@ -381,7 +381,7 @@ def main():
 	P1_Norm = np.zeros(d_range)
 	for d in range(d_range):
 		x = np.power(R[d],2)
-		if R[d] > 0.1:
+		if R[d] > 0.2:
 			P1_Norm[d] = np.power(np.abs(P1_MA[d]), 2) / x
 			
 	P1_Derivative = np.zeros(d_range - 1)
@@ -495,7 +495,10 @@ def main():
 		Sym_BB = []
 		Sym_BB_Eq = []
 		for sym_i in range(4):
-			Sym_BB.append(np.fft.fft(baseband_samples[Start_i:Start_i + fft_n])*bin_n/fft_n)
+			try:
+				Sym_BB.append(np.fft.fft(baseband_samples[Start_i:Start_i + fft_n])*bin_n/fft_n)
+			except:
+				Sym_BB.append(np.zeros(fft_n, dtype='complex'))
 			Start_i += (fft_n + cp_n)
 		
 			ax[sg[sym_i][0],sg[sym_i][1]].set_title(f'Symbol {sym_i}')
@@ -516,7 +519,7 @@ def main():
 		Eq_BB, SNR_lin = CalcEq(Sym_BB[0],Ref_BB)
 		Avg_SNR_Lin += SNR_lin
 		SNR_dB = 20*np.log10(SNR_lin)
-		Eq_BB = FilterInterpOddBB2(Eq_BB, bin_0, bin_max)
+		Eq_BB = FilterInterpOddBB2(Eq_BB)
 		#CalcTimeOffset(Eq_BB, bin_0, bin_max, bin_width)
 
 		for sym_i in range(4):
