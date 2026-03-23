@@ -47,6 +47,52 @@ def GenSCPre(sym_n, pre_n, start_carrier, end_carrier, seed):
 	# prepend cyclic prefix
 	sc_audio = np.concatenate([sc_audio[-pre_n:], sc_audio])
 	return sc_audio.real
+
+def GenSCWidePre(sym_n, pre_n, start_carrier, end_carrier, start_data_carrier, end_data_carrier, seed):
+	np.random.seed(seed)
+	baseband = np.zeros(sym_n, dtype='complex')
+	# set low energy constellation points for the preamble
+	coord = np.sqrt(2)/2
+	# 
+	for i in range(start_data_carrier, end_data_carrier+1):
+		if i % 2:
+			# i is odd, zero this subcarrier
+			baseband[i] = 0
+		else:
+			# i is even
+			baseband[i] = np.random.choice([-coord,coord]) + (np.random.choice([-coord,coord]) * 1j)
+		# make output real by setting negative frequency subcarrier to conjugate
+		if i > 0:
+			baseband[(sym_n - i)] = baseband[i].conj()
+	# Now add the extended guard carriers
+	for i in range(start_carrier, start_data_carrier):
+		if i % 2:
+			# i is odd, zero this subcarrier
+			baseband[i] = 0
+		else:
+			# i is even
+			baseband[i] = np.random.choice([-coord,coord]) + (np.random.choice([-coord,coord]) * 1j)
+		# make output real by setting negative frequency subcarrier to conjugate
+		if i > 0:
+			baseband[(sym_n - i)] = baseband[i].conj()
+	for i in range(end_data_carrier+1, end_carrier+1):
+		if i % 2:
+			# i is odd, zero this subcarrier
+			baseband[i] = 0
+		else:
+			# i is even
+			baseband[i] = np.random.choice([-coord,coord]) + (np.random.choice([-coord,coord]) * 1j)
+		# make output real by setting negative frequency subcarrier to conjugate
+		if i > 0:
+			baseband[(sym_n - i)] = baseband[i].conj()
+
+	# Generate the audio
+	sc_audio = ifft(baseband, sym_n)
+	# Scale the audio based on carriers in use
+	sc_audio *= sym_n / (end_carrier - start_carrier)
+	# prepend cyclic prefix
+	sc_audio = np.concatenate([sc_audio[-pre_n:], sc_audio])
+	return sc_audio.real
 	
 def GenProbe(sym_n, pre_n, start_carrier, end_carrier):
 	baseband = np.zeros(sym_n, dtype='complex')
@@ -144,20 +190,25 @@ def main():
 	cp_n = 16
 	fft_n = 512
 	f_0 = 600
-	sc_f_0 = 500
 	f_max = 3400
-	sc_f_max = 3500
+	sc_guard_n = 3 # number of extra even bins on each side of spectrum in SC preamble
 	pilot_n = 4
 	sym_rate = audio_sample_rate / (fft_n + cp_n)
 	bin_width = audio_sample_rate / fft_n
 	bin_0 = int(np.ceil(f_0/bin_width))
-	sc_bin_0 = int(sc_f_0 / bin_width)
-	while sc_bin_0 % 2: # make sure this bin is even (contains a carrier)
-		sc_bin_0 -= 1
 	bin_max = int(np.floor(f_max/bin_width))
-	sc_bin_max = int(sc_f_max / bin_width)
-	while sc_bin_max % 2: # make sure this bin is even (contains a carrier)
+	sc_bin_0 = bin_0
+	x_n = 0
+	while x_n < sc_guard_n:
+		sc_bin_0 -= 1
+		if sc_bin_0 % 2 == 0:
+			x_n += 1
+	sc_bin_max = bin_max
+	x_n = 0
+	while x_n < sc_guard_n:
 		sc_bin_max += 1
+		if sc_bin_max % 2 == 0:
+			x_n += 1
 	sc_bin_n = (sc_bin_max - sc_bin_0) + 1
 	bin_n = (bin_max - bin_0) + 1
 	data_carrier_n = bin_n - pilot_n
@@ -189,7 +240,7 @@ def main():
 	
 	# Generate Schmidl-Cox preamble
 	audio_samples = np.zeros(fft_n+cp_n)
-	audio_samples = np.concatenate([audio_samples,GenSCPre(fft_n, cp_n, sc_bin_0, sc_bin_max, 0)])
+	audio_samples = np.concatenate([audio_samples,GenSCWidePre(fft_n, cp_n, sc_bin_0, sc_bin_max, bin_0, bin_max, 0)])
 	audio_samples = np.concatenate([audio_samples, GenRandomQPSK(fft_n, cp_n, bin_0, bin_0+bin_n, pilots)])
 	audio_samples = np.concatenate([audio_samples, GenRandomQPSK(fft_n, cp_n, bin_0, bin_0+bin_n, pilots)])
 	audio_samples = np.concatenate([audio_samples, GenRandomQPSK(fft_n, cp_n, bin_0, bin_0+bin_n, pilots)])

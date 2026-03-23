@@ -25,6 +25,40 @@ def CalcTimeOffset(eq_taps, bin_0, bin_max, bin_spacing):
 	
 	
 
+def FilterInterpOddBB2(symbol, start_i, end_i): 
+	# Interpolate from indicated indices, assuming data is only in odd indices
+	# work on magnitudes first
+
+	mags = np.abs(symbol)
+	for i in range(1,len(symbol)-1):
+		if i % 2:
+			# inner sample, interpolate between surrounding points:
+			mags[i] = (np.abs(symbol[i-1]) + np.abs(symbol[i+1])) / 2
+	ma_filter_len = 5
+	ma_filter = np.ones(ma_filter_len) / ma_filter_len
+	mags = np.convolve(ma_filter, mags, mode='full')
+	offset = len(ma_filter) // 2
+	mags = mags[offset:offset + len(symbol)]
+	
+	angles = np.angle(symbol)
+	# Now interpolate phase
+	for i in range(1,len(symbol)-1):
+		if i % 2:
+			# inner sample, interpolate between surrounding points:
+			# make sure the interpolation samples are continuous
+			s0 = angles[i-1]
+			s1 = angles[i+1]
+			while (s0-s1) > np.pi:
+				s1 += 2*np.pi
+			while (s1-s0) > np.pi:
+				s0 += 2*np.pi
+
+			angles[i] = (s0 + s1) / 2
+
+	for i in range(len(symbol)):
+		symbol[i] = mags[i] * np.exp(1j * angles[i])
+	return symbol
+
 def FilterInterpOddBB(symbol, start_i, end_i): 
 	# Interpolate from indicated indices, assuming data is only in odd indices
 	# work on magnitudes first
@@ -125,6 +159,47 @@ def PlotPilots(start_carrier, end_carrier, pilot_count):
 		this_coord *= 1j
 	return pilot_indicies
 
+
+def GenSCWidePreBB(sym_n, pre_n, start_carrier, end_carrier, start_data_carrier, end_data_carrier, seed):
+	np.random.seed(seed)
+	baseband = np.zeros(sym_n, dtype='complex')
+	# set low energy constellation points for the preamble
+	coord = np.sqrt(2)/2
+	# 
+	for i in range(start_data_carrier, end_data_carrier+1):
+		if i % 2:
+			# i is odd, zero this subcarrier
+			baseband[i] = 0
+		else:
+			# i is even
+			baseband[i] = np.random.choice([-coord,coord]) + (np.random.choice([-coord,coord]) * 1j)
+		# make output real by setting negative frequency subcarrier to conjugate
+		if i > 0:
+			baseband[(sym_n - i)] = baseband[i].conj()
+	# Now add the extended guard carriers
+	for i in range(start_carrier, start_data_carrier):
+		if i % 2:
+			# i is odd, zero this subcarrier
+			baseband[i] = 0
+		else:
+			# i is even
+			baseband[i] = np.random.choice([-coord,coord]) + (np.random.choice([-coord,coord]) * 1j)
+		# make output real by setting negative frequency subcarrier to conjugate
+		if i > 0:
+			baseband[(sym_n - i)] = baseband[i].conj()
+	for i in range(end_data_carrier+1, end_carrier+1):
+		if i % 2:
+			# i is odd, zero this subcarrier
+			baseband[i] = 0
+		else:
+			# i is even
+			baseband[i] = np.random.choice([-coord,coord]) + (np.random.choice([-coord,coord]) * 1j)
+		# make output real by setting negative frequency subcarrier to conjugate
+		if i > 0:
+			baseband[(sym_n - i)] = baseband[i].conj()
+
+	return baseband
+
 def GenSCPreBB(sym_n, start_carrier, end_carrier, seed):
 	np.random.seed(seed)
 	baseband = np.zeros(sym_n, dtype='complex')
@@ -207,6 +282,23 @@ def main():
 	bin_0 = int(sys.argv[5])
 	bin_max = int(sys.argv[6])
 	bin_n = (bin_max-bin_0) + 1
+
+
+	sc_guard_n = 3 # number of extra even bins on each side of spectrum in SC preamble
+	sc_bin_0 = bin_0
+	x_n = 0
+	while x_n < sc_guard_n:
+		sc_bin_0 -= 1
+		if sc_bin_0 % 2 == 0:
+			x_n += 1
+	sc_bin_max = bin_max
+	x_n = 0
+	while x_n < sc_guard_n:
+		sc_bin_max += 1
+		if sc_bin_max % 2 == 0:
+			x_n += 1
+	sc_bin_n = (sc_bin_max - sc_bin_0) + 1
+
 
 	pilot_n = 4
 	pilots = PlotPilots(bin_0, bin_max, pilot_n)
@@ -389,7 +481,7 @@ def main():
 
 	for SC_Peak_Sample in Sync_List:
 		# Calculate reference baseband from known SC Preamble data
-		Ref_BB = GenSCPreBB(fft_n, bin_0, bin_max, 0)
+		Ref_BB = GenSCWidePreBB(fft_n, cp_n, sc_bin_0, sc_bin_max, bin_0, bin_max, 0)
 		# Calculate reference error this will be zeros)
 		Eq_BB = CalcEq(Ref_BB, Ref_BB)
 		fig,ax = plt.subplots(2,3, figsize=(12,8), layout='constrained')
@@ -424,7 +516,7 @@ def main():
 		Eq_BB, SNR_lin = CalcEq(Sym_BB[0],Ref_BB)
 		Avg_SNR_Lin += SNR_lin
 		SNR_dB = 20*np.log10(SNR_lin)
-		Eq_BB = FilterInterpOddBB(Eq_BB, bin_0, bin_max)
+		Eq_BB = FilterInterpOddBB2(Eq_BB, bin_0, bin_max)
 		#CalcTimeOffset(Eq_BB, bin_0, bin_max, bin_width)
 
 		for sym_i in range(4):
