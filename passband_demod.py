@@ -34,7 +34,7 @@ def FilterInterpOddBB2(symbol):
 		if i % 2:
 			# inner sample, interpolate between surrounding points:
 			mags[i] = (np.abs(symbol[i-1]) + np.abs(symbol[i+1])) / 2
-	ma_filter_len = 5
+	ma_filter_len = 3
 	ma_filter = np.ones(ma_filter_len) / ma_filter_len
 	mags = np.convolve(ma_filter, mags, mode='full')
 	offset = len(ma_filter) // 2
@@ -538,14 +538,26 @@ def main():
 
 		ax[0,0].set_title(f'Channel Magnitude\nPreamble SNR: {SNR_dB:.1f} dB')
 		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Sym_BB[0][bin_0: bin_max+1]), s=2, color='grey')
-		ax[0,0].plot(fft_freq[bin_0: bin_max+1],np.abs(Eq_BB[bin_0: bin_max+1]), linewidth=2, color='blue')
-		ax[0,0].legend(['Preamble', 'Equalizer'])
+		# plot measured EQ points in blue, interpolated in red
+		if bin_0 % 2: # bin_0 is odd, first color blue
+			first_color = 'blue'
+			second_color = 'red'
+			legend = ['preamble', 'meas eq', 'interp eq']
+		else:
+			first_color = 'red'
+			second_color = 'blue'
+			legend = ['preamble', 'interp eq', 'meas eq']
+			
+		ax[0,0].scatter(fft_freq[bin_0: bin_max+1:2],np.abs(Eq_BB[bin_0: bin_max+1:2]), s=2, color=first_color)
+		ax[0,0].scatter(fft_freq[bin_0+1: bin_max+1:2],np.abs(Eq_BB[bin_0+1: bin_max+1:2]), s=2, color=second_color)
+		ax[0,0].legend(legend)
 		ax[0,0].set_ylim(-0.5,3.5)
 		ax[0,0].grid(True)
 		ax[1,0] = fig.add_subplot(2,3,4, projection='polar')
 		ax[1,0].set_title('Channel Phase')
-		ax[1,0].plot(np.angle(Eq_BB[bin_0:bin_max+1]),fft_freq[bin_0:bin_max+1], linewidth=2)
-		ax[1,0].legend(['Equalizer'])
+		ax[1,0].scatter(np.angle(Eq_BB[bin_0:bin_max+1:2]),fft_freq[bin_0:bin_max+1:2], s=2, color=first_color)
+		ax[1,0].scatter(np.angle(Eq_BB[bin_0+1:bin_max+1:2]),fft_freq[bin_0+1:bin_max+1:2], s=2, color=second_color)
+		ax[1,0].legend(legend[1:])
 		ax[1,0].grid(True)
 
 		plt.show()
