@@ -425,8 +425,7 @@ def main():
 		Avg_SNR_Lin += SNR_lin
 		SNR_dB = 20*np.log10(SNR_lin)
 		Eq_BB = FilterInterpOddBB(Eq_BB, bin_0, bin_max)
-		#Eq_Channel, Eq_Time, Time_Offset = CalcTimeOffset(Eq_BB, bin_0, bin_max, fft_n, audio_sample_rate)
-		CalcTimeOffset(Eq_BB, bin_0, bin_max, bin_width)
+		#CalcTimeOffset(Eq_BB, bin_0, bin_max, bin_width)
 
 		for sym_i in range(4):
 			Sym_BB_Eq.append(Sym_BB[sym_i] * Eq_BB.conj())
