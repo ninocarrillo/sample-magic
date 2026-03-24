@@ -190,7 +190,7 @@ def main():
 	cp_n = 16
 	fft_n = 512
 	f_0 = 600
-	f_max = 3400
+	f_max = 3030
 	sc_guard_n = 3 # number of extra even bins on each side of spectrum in SC preamble
 	pilot_n = 4
 	sym_rate = audio_sample_rate / (fft_n + cp_n)

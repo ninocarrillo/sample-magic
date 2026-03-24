@@ -16,7 +16,7 @@ def UpdateEqPilots(symbol, eq, pilots):
 	pilot_correction = 1j
 	p_errors = np.zeros(len(pilots))
 	for i in range(len(pilots)):
-		p_errors[i] = (((np.angle(symbol[pilots[i][0]]) - np.angle(pilots[i][1]*pilot_correction)) + np.pi/2) % np.pi) - np.pi/2
+		p_errors[i] = (((np.angle(symbol[pilots[i][0]]) - np.angle(pilots[i][1]*pilot_correction)) + np.pi/2) % np.pi) - (np.pi/2)
 		# Normalize phase error to frequency bin:
 		p_errors[i] = p_errors[i] / pilots[i][0]
 	print(f'Normalized pilot errors: ')
@@ -24,42 +24,53 @@ def UpdateEqPilots(symbol, eq, pilots):
 		print(f'{e*180/np.pi:.3f} deg/bin')
 	print(f'Avg pilot error: {np.average(p_errors)*180/np.pi:.3f} deg/bin')
 	return eq
-	
-def FilterInterpOddBB2(symbol): 
-	# Interpolate from indicated indices, assuming data is only in even indices
 
-	# set every odd position to zero
-	for i in range(len(symbol)):
-		if i % 2:
-			symbol[i] = 0
-
-	interp_filter = np.array([1/3,.5,1/3,.5,1/3])
-	symbol = np.convolve(symbol, interp_filter, mode='full')
-	offset = len(interp_filter) // 2
-	symbol = symbol[offset:-offset]
-
-	return symbol	
 
 def CalcEq(rx_symbol, ref_symbol):
+	# Calculate equalizer taps from the FFT of Schnmidl-Cox preamble symbol
+	# Preamble symbol only has data in even bins, which means we will need
+	# to interpolate equalizer taps for the odd bins. It also means we can
+	# estimate signal-to-noise ratio by averaging the energy in the even bins
+	# and the energy in the odd bins and computing a ratio.
+
 	sig_e = 0
 	noise_e = 0
+	# Initially set the equalizer to the dot product of the conjugate of the 
+	# reference symbol with the received symbol.
+	# This computes bins beyond those occupied in the waveform, because compute
+	# is cheap on my pc. Could make it more efficient in hardware by only doing
+	# the calculations on the bins that contain the waveform.
 	eq = ref_symbol.conj() * rx_symbol
-	for i in range(len(eq)):
-		if np.abs(eq[i]) > 0:
-			eq[i] = eq[i] / np.power(np.abs(eq[i]),2)
-		else:
-			eq[i] = 1
-			pass
-		if i % 2 == 1:
-			# Odd subcarrier, only noise
+	for i in range(len(eq)): # step thru every equalizer tap
+		if i % 2:
+			# Odd subcarrier, only noise here
+			# Computer the noise energy and sum it
 			noise_e += np.power(np.abs(rx_symbol[i]),2)
+			# now zero this equalizer bin, prep for interpolation
+			eq[i] = 0
 		else:
 			# Even subcarrier, signal here
 			sig_e += np.power(np.abs(rx_symbol[i]),2)
-	if noise_e > 0:
+			if np.abs(eq[i]) > 0: # avoid divide-by-zero
+				eq[i] = eq[i] / np.power(np.abs(eq[i]),2)
+			else: # in lieu of divide-by-zero, make this bin unity
+				eq[i] = 1
+	if noise_e > 0: # avoid divide-by-zero
 		snr = sig_e / noise_e
-	else:
-		snr = 1e6
+	else: # set some maximum snr
+		snr = 1e5
+	# Interpolate the empty equalizer bins and do a and moving average in one step.
+	# The interpolation filter computes the average of the two surrounding bins for
+	# every empty bin. It also averages each occupied bin with the surrounding two 
+	# occupied bins.
+	interp_filter = np.array([1/3,.5,1/3,.5,1/3])
+	# Do the filter convolution
+	eq = np.convolve(eq, interp_filter, mode='full')
+	# Remove the filter delay:
+	# Divide filter length by two and floor the result
+	offset = len(interp_filter) // 2
+	# Discard delayed samples to re-align equalizer taps to bins
+	eq = eq[offset:-offset]
 	return eq.conj(), snr
 
 def PlotPilots(start_carrier, end_carrier, pilot_count):
@@ -426,9 +437,7 @@ def main():
 		# Even indices contain channel noise measurement, odd contain channel response measurement
 		Eq_BB, SNR_lin = CalcEq(Sym_BB[0],Ref_BB)
 		Avg_SNR_Lin += SNR_lin
-		SNR_dB = 20*np.log10(SNR_lin)
-		Eq_BB = FilterInterpOddBB2(Eq_BB)
-		#CalcTimeOffset(Eq_BB, bin_0, bin_max, bin_width)
+		SNR_dB = 10*np.log10(SNR_lin)
 
 		for sym_i in range(4):
 			
@@ -497,7 +506,7 @@ def main():
 				i += 1
 
 	Avg_SNR_Lin /= len(Sync_List)
-	Avg_SNR_dB = 20*np.log10(SNR_lin)
+	Avg_SNR_dB = 10*np.log10(SNR_lin)
 
 	Error_Freqs = fft_freq[bin_0:bin_max+1]
 	Error_Sym_n = 3 * len(Sync_List)
