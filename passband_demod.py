@@ -63,6 +63,13 @@ def CalcEq(rx_symbol, ref_symbol):
 	# The interpolation filter computes the average of the two surrounding bins for
 	# every empty bin. It also averages each occupied bin with the surrounding two 
 	# occupied bins.
+	# This is a 2-dimensional linear interpolation of the I/Q data. This works because
+	# we have a very high number of carriers. In other words, the radial distance between
+	# the equalizer taps is very low, so we can ignore the magnitude error caused by this
+	# approach. If we interpolated along a curve between the two I/Q points, the angle of
+	# the interpolated point would be the same but the magnitude would be slightly higher.
+	# The magnitude error is approximately the inverse of the cosine of half the angle of
+	# separation between the two surrounding occupied equalizer taps.
 	interp_filter = np.array([1/3,.5,1/3,.5,1/3])
 	# Do the filter convolution
 	eq = np.convolve(eq, interp_filter, mode='full')
@@ -128,20 +135,6 @@ def GenSCWidePreBB(sym_n, pre_n, start_carrier, end_carrier, start_data_carrier,
 		if i > 0:
 			baseband[(sym_n - i)] = baseband[i].conj()
 
-	return baseband
-
-def GenSCPreBB(sym_n, start_carrier, end_carrier, seed):
-	np.random.seed(seed)
-	baseband = np.zeros(sym_n, dtype='complex')
-	# set low energy constellation points for the preamble
-	coord = np.sqrt(2)/2
-	for i in range(start_carrier, end_carrier+1):
-		if i % 2:
-			# i is odd, zero this subcarrier
-			baseband[i] = 0
-		else:
-			# i is even
-			baseband[i] = np.random.choice([-coord,coord]) + (np.random.choice([-coord,coord]) * 1j)
 	return baseband
 
 def AnalyzeSpectrum(waveform, sample_rate, power_ratio):
@@ -434,7 +427,6 @@ def main():
 					ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB[sym_i][p[0]].real],[0,Sym_BB[sym_i][p[0]].imag], color='grey', linewidth=1)
 
 		# Collect equalization data from the Schmidle Cox preamble:
-		# Even indices contain channel noise measurement, odd contain channel response measurement
 		Eq_BB, SNR_lin = CalcEq(Sym_BB[0],Ref_BB)
 		Avg_SNR_Lin += SNR_lin
 		SNR_dB = 10*np.log10(SNR_lin)
