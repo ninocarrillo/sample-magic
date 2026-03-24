@@ -116,7 +116,7 @@ def GenRandomQPSK(sym_n, pre_n, start_carrier, end_carrier, pilots):
 		baseband[i] = np.random.choice([-coord,coord]) + (np.random.choice([-coord,coord]) * 1j)
 	# Add pilot carriers
 	for pilot in pilots:
-		baseband[pilot[0]] = pilot[1] * 1j
+		baseband[pilot[0]] = pilot[1]
 	# Make real by setting conjugates negative:
 	for i in range(start_carrier, end_carrier+1):
 		if i > 0:

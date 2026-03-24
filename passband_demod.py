@@ -25,9 +25,9 @@ def UpdateEqPilots(symbol, eq, pilots):
 	print(pilots)
 	p_errors = np.zeros(len(pilots))
 	for i in range(len(pilots)):
-		p_errors[i] = np.angle(symbol[pilots[i][0]]) - np.angle(pilots[i][1]) % np.pi
+		p_errors[i] = (np.angle(symbol[pilots[i][0]]) - np.angle(pilots[i][1]))
 		#p_errors[i] = np.angle(pilots[i][1])
-	print(p_errors)
+	print(f'Pilot Errors: {p_errors}')
 	return eq
 	
 def FilterInterpOddBB2(symbol): 
@@ -48,7 +48,7 @@ def FilterInterpOddBB2(symbol):
 def CalcEq(rx_symbol, ref_symbol):
 	sig_e = 0
 	noise_e = 0
-	eq = ref_symbol.conj() * rx_symbol 
+	eq = ref_symbol.conj() * rx_symbol
 	for i in range(len(eq)):
 		if np.abs(eq[i]) > 0:
 			eq[i] = eq[i] / np.power(np.abs(eq[i]),2)
@@ -65,7 +65,7 @@ def CalcEq(rx_symbol, ref_symbol):
 		snr = sig_e / noise_e
 	else:
 		snr = 1e6
-	return eq, snr
+	return eq.conj(), snr
 
 def PlotPilots(start_carrier, end_carrier, pilot_count):
 	pilot_indicies = []
@@ -137,17 +137,6 @@ def GenSCPreBB(sym_n, start_carrier, end_carrier, seed):
 			# i is even
 			baseband[i] = np.random.choice([-coord,coord]) + (np.random.choice([-coord,coord]) * 1j)
 	return baseband
-
-def SmoothSymbol(symbol, freq):
-	paired = zip(freq,symbol)
-	sorted_paired = sorted(paired)
-	sorted_freq,sorted_symbol = zip(*sorted_paired)
-	smooth_symbol = savgol_filter(np.abs(sorted_symbol),window_length=17, polyorder = 3) * np.exp(np.multiply(1j,np.angle(sorted_symbol)))
-	final_symbol = np.zeros(len(smooth_symbol), dtype='complex')
-	for i in range(len(smooth_symbol)):
-		final_symbol[i] = smooth_symbol[np.where(sorted_freq == freq[i])]
-
-	return final_symbol
 
 def AnalyzeSpectrum(waveform, sample_rate, power_ratio):
 	fft_n = len(waveform)
@@ -453,7 +442,7 @@ def main():
 				Eq_BB = UpdateEqPilots(Sym_BB_Eq[sym_i - 1], Eq_BB, pilots)
 			
 			
-			Sym_BB_Eq.append(Sym_BB[sym_i] * Eq_BB.conj())
+			Sym_BB_Eq.append(Sym_BB[sym_i] * Eq_BB)
 		
 			# Plot the equalized subcarrier I/Q in blue
 			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB_Eq[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq[sym_i][bin_0: bin_max+1].imag, color='red', s=2)
