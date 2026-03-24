@@ -21,75 +21,6 @@ def CalcTimeOffset(eq_taps, bin_0, bin_max, bin_spacing):
 	avg_norm_phase_err = np.average(norm_phase_err)
 	print(f'Equalizer time offset {avg_norm_phase_err:.4f} rad/bin, {1000*avg_norm_phase_err/(bin_spacing*2*np.pi):.4f} mS, ')
 
-def CalcPilotError(symbol, bb_fs, oversample):
-	p0 = 7 # 0 Phase
-	p1 = 21 # 0 Phase
-	p2 = 43 # 0 Phase
-	p3 = 57 # 180 Phase
-	
-	# Calculate phase error of each pilot in fine ranging symbol
-	p0_err = np.angle(symbol[p0], deg=True)
-	p1_err = np.angle(symbol[p1], deg=True)
-	p2_err = -np.angle(symbol[p2], deg=True)
-	p3_err = -180-np.angle(symbol[p3], deg=True)
-	while p3_err <= -180:
-		p3_err += 360
-	while p3_err > 180:
-		p3_err -= 360
-	while p2_err <= -180:
-		p2_err += 360
-	while p2_err > 180:
-		p2_err -= 360
-	while p1_err <= -180:
-		p1_err += 360
-	while p1_err > 180:
-		p1err -= 360
-	while p0_err <= -180:
-		p0_err += 360
-	while p0_err > 180:
-		p0_err -= 360
-		
-	# Normalize phase error to subcarrier index position
-	p0_err_norm = p0_err / (p0+1)
-	p1_err_norm = p1_err / (p1+1)
-	p2_err_norm = p2_err / (64-p2)
-	p3_err_norm = p3_err / (64-p3)
-
-	fine_range_exact = np.average([p0_err_norm, p1_err_norm, p2_err_norm, p3_err_norm]) # degrees per subcarrier
-
-	# convert the fine range estimate to time units
-	print(f'Baseband Sample Rate: {bb_fs} Hz')
-	bin_spacing = bb_fs / (len(symbol) * oversample)
-	print(f'Bin spacing: {bin_spacing} Hz')
-	time_offset = fine_range_exact / (bin_spacing * 360)
-	pilot_sample_offset = time_offset * bb_fs
-	print(f'Sample time offset: {time_offset * 1e3:.2f} ms, {pilot_sample_offset:.2f} samples')
-
-
-	print(f'Pilot 0 Error: {p0_err:.2f} deg, {p0_err_norm:.2f} deg/sub')
-	print(f'Pilot 1 Error: {p1_err:.2f} deg, {p1_err_norm:.2f} deg/sub')
-	print(f'Pilot 2 Error: {p2_err:.2f} deg, {p2_err_norm:.2f} deg/sub')
-	print(f'Pilot 3 Error: {p3_err:.2f} deg, {p3_err_norm:.2f} deg/sub')
-	print(f'Average pilot error: {fine_range_exact:.2f} deg/sub')
-	
-	fft_n = len(symbol)
-	Phase_Error = np.zeros(fft_n)
-	Feedback_Gain = 0.75
-	for i in range(fft_n):
-		if i < fft_n/2:
-			Phase_Error[i] =  (i + 1) * time_offset * (bin_spacing * 360) * Feedback_Gain
-		else:
-			Phase_Error[i] = -(fft_n - i) * time_offset * (bin_spacing * 360) * Feedback_Gain
-	
-	Error_Vector = np.exp(np.multiply(1j*np.pi/180,Phase_Error))
-			
-	
-	
-	return pilot_sample_offset, Error_Vector
-
-
-
-
 def UpdateEqPilots(symbol, eq, pilots):
 	print(pilots)
 	p_errors = np.zeros(len(pilots))
@@ -101,99 +32,18 @@ def UpdateEqPilots(symbol, eq, pilots):
 	
 def FilterInterpOddBB2(symbol): 
 	# Interpolate from indicated indices, assuming data is only in even indices
-	# work on magnitudes first
 
-	mags = np.abs(symbol)
 	# set every odd position to zero
-	for i in range(len(mags)):
+	for i in range(len(symbol)):
 		if i % 2:
-			mags[i] = 0
-	#interp_filter = np.array([.5,1,.5])
+			symbol[i] = 0
+
 	interp_filter = np.array([1/3,.5,1/3,.5,1/3])
-	mags = np.convolve(mags, interp_filter, mode='full')
+	symbol = np.convolve(symbol, interp_filter, mode='full')
 	offset = len(interp_filter) // 2
-	mags = mags[offset:offset + len(symbol)]
-	
-	angles = np.angle(symbol)
-	# Now interpolate phase
-	for i in range(1,len(symbol)-1):
-		if i % 2:
-			# inner sample, interpolate between surrounding points:
-			# make sure the interpolation samples are continuous
-			s0 = angles[i-1]
-			s1 = angles[i+1]
-			while (s0-s1) > np.pi:
-				s1 += 2*np.pi
-			while (s1-s0) > np.pi:
-				s0 += 2*np.pi
+	symbol = symbol[offset:-offset]
 
-			angles[i] = (s0 + s1) / 2
-
-	for i in range(len(symbol)):
-		symbol[i] = mags[i] * np.exp(1j * angles[i])
-	return symbol
-
-def FilterInterpOddBB(symbol, start_i, end_i): 
-	# Interpolate from indicated indices, assuming data is only in odd indices
-	# work on magnitudes first
-	if start_i % 2 == 1:
-		first_i = start_i + 1
-	else:
-		first_i = start_i
-	entry_slope = (np.abs(symbol[first_i+10]) - np.abs(symbol[first_i])) / 10
-	if end_i % 2 == 1:
-		last_i = end_i - 1
-	else:
-		last_i = end_i
-	exit_slope = (np.abs(symbol[last_i]) - np.abs(symbol[last_i-10])) / 10
-
-	mags = np.zeros(len(symbol))
-	for i in range(len(symbol)-1):
-		if i <= start_i:
-			# linear extrapolation:
-			mags[i] = np.abs(symbol[first_i]) + (entry_slope * (start_i - i))
-		elif i >= end_i:
-			# linear extrapolation:
-			mags[i] = np.abs(symbol[last_i]) + (exit_slope * (i - last_i))
-		elif i % 2:
-			# inner sample, interpolate between surrounding points:
-			mags[i] = (np.abs(symbol[i-1]) + np.abs(symbol[i+1])) / 2
-		else:
-			mags[i] = np.abs(symbol[i])
-	ma_filter_len = 11
-	ma_filter = np.ones(ma_filter_len) / ma_filter_len
-	mags = np.convolve(ma_filter, mags, mode='full')
-	offset = len(ma_filter) // 2
-	mags = mags[offset:offset + len(symbol)]
-	
-	# Interpolate phase component
-	last_phase = 0
-	angles = np.angle(symbol)
-	# Now interpolate and extrapolate
-	entry_slope = (angles[first_i+2] - angles[first_i]) / 2
-	exit_slope = (angles[last_i] - angles[last_i-2]) / 2
-	for i in range(len(symbol)-1):
-		if i <= start_i:
-			# linear extrapolation:
-			angles[i] = angles[first_i] + (entry_slope * (start_i - i))
-		elif i >= end_i:
-			# linear extrapolation:
-			angles[i] = angles[last_i] + (exit_slope * (i - last_i))
-		elif i % 2:
-			# inner sample, interpolate between surrounding points:
-			# make sure the interpolation samples are continuous
-			s0 = angles[i-1]
-			s1 = angles[i+1]
-			while (s0-s1) > np.pi:
-				s1 += 2*np.pi
-			while (s1-s0) > np.pi:
-				s0 += 2*np.pi
-
-			angles[i] = (s0 + s1) / 2
-
-	for i in range(len(symbol)):
-		symbol[i] = mags[i] * np.exp(1j * angles[i])
-	return symbol
+	return symbol	
 
 def CalcEq(rx_symbol, ref_symbol):
 	sig_e = 0
