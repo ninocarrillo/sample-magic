@@ -12,22 +12,17 @@ from scipy.signal import firwin
 from scipy.signal import savgol_filter
 
 
-def CalcTimeOffset(eq_taps, bin_0, bin_max, bin_spacing):
-	bin_n = (bin_max - bin_0) + 1
-	norm_phase_err = np.zeros(bin_n)
-	for i in range(bin_n):
-		norm_phase_err[i] = np.angle(eq_taps[i]) / (i + bin_0 - 1)
-
-	avg_norm_phase_err = np.average(norm_phase_err)
-	print(f'Equalizer time offset {avg_norm_phase_err:.4f} rad/bin, {1000*avg_norm_phase_err/(bin_spacing*2*np.pi):.4f} mS, ')
-
 def UpdateEqPilots(symbol, eq, pilots):
-	print(pilots)
+	pilot_correction = 1j
 	p_errors = np.zeros(len(pilots))
 	for i in range(len(pilots)):
-		p_errors[i] = (np.angle(symbol[pilots[i][0]]) - np.angle(pilots[i][1]))
-		#p_errors[i] = np.angle(pilots[i][1])
-	print(f'Pilot Errors: {p_errors}')
+		p_errors[i] = (((np.angle(symbol[pilots[i][0]]) - np.angle(pilots[i][1]*pilot_correction)) + np.pi/2) % np.pi) - np.pi/2
+		# Normalize phase error to frequency bin:
+		p_errors[i] = p_errors[i] / pilots[i][0]
+	print(f'Normalized pilot errors: ')
+	for e in p_errors:
+		print(f'{e*180/np.pi:.3f} deg/bin')
+	print(f'Avg pilot error: {np.average(p_errors)*180/np.pi:.3f} deg/bin')
 	return eq
 	
 def FilterInterpOddBB2(symbol): 
