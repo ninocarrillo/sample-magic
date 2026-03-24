@@ -59,10 +59,9 @@ def CalcEq(rx_symbol, ref_symbol):
 		snr = sig_e / noise_e
 	else: # set some maximum snr
 		snr = 1e5
-	# Interpolate the empty equalizer bins and do a and moving average in one step.
+	# Interpolate the empty equalizer bins.
 	# The interpolation filter computes the average of the two surrounding bins for
-	# every empty bin. It also averages each occupied bin with the surrounding two 
-	# occupied bins.
+	# every empty bin.
 	# This is a 2-dimensional linear interpolation of the I/Q data. This works because
 	# we have a very high number of carriers. In other words, the radial distance between
 	# the equalizer taps is very low, so we can ignore the magnitude error caused by this
@@ -70,7 +69,7 @@ def CalcEq(rx_symbol, ref_symbol):
 	# the interpolated point would be the same but the magnitude would be slightly higher.
 	# The magnitude error is approximately the inverse of the cosine of half the angle of
 	# separation between the two surrounding occupied equalizer taps.
-	interp_filter = np.array([1/3,.5,1/3,.5,1/3])
+	interp_filter = np.array([.5,1,0.5])
 	# Do the filter convolution
 	eq = np.convolve(eq, interp_filter, mode='full')
 	# Remove the filter delay:
@@ -454,7 +453,7 @@ def main():
 		ax[0,0].set_title(f'Channel Magnitude\nPreamble SNR: {SNR_dB:.1f} dB')
 		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Sym_BB[0][bin_0: bin_max+1]), s=2, color='grey')
 		# plot measured EQ points in blue, interpolated in red
-		if bin_0 % 2: # bin_0 is odd, first color blue
+		if (bin_0 % 2)==0: # bin_0 is even, first color blue
 			first_color = 'blue'
 			second_color = 'red'
 			legend = ['preamble', 'meas eq', 'interp eq']
