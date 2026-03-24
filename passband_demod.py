@@ -22,7 +22,15 @@ def UpdateEqPilots(symbol, eq, pilots):
 	print(f'Normalized pilot errors: ')
 	for e in p_errors:
 		print(f'{e*180/np.pi:.3f} deg/bin')
-	print(f'Avg pilot error: {np.average(p_errors)*180/np.pi:.3f} deg/bin')
+	e_avg = np.average(p_errors)
+	# Create an array of phase corrections for each bin:
+	phase_correction = np.zeros(len(eq))
+	for i in range(len(eq)):
+		phase_correction[i] = e_avg * i
+	print(f'Avg pilot error: {e_avg*180/np.pi:.3f} deg/bin')
+	# Adjust the equalizer phase:
+	p = np.exp(1j*phase_correction)
+	eq *= p.conj()
 	return eq
 
 
@@ -405,6 +413,7 @@ def main():
 
 		Sym_BB = []
 		Sym_BB_Eq = []
+		Sym_BB_Eq_x = []
 		for sym_i in range(4):
 			try:
 				Sym_BB.append(np.fft.fft(baseband_samples[Start_i:Start_i + fft_n])*bin_n/fft_n)
@@ -433,14 +442,18 @@ def main():
 		for sym_i in range(4):
 			
 			# Refine the equalizer time offset based on the pilots of the previous symbol:
-			if sym_i > 1:
-				Eq_BB = UpdateEqPilots(Sym_BB_Eq[sym_i - 1], Eq_BB, pilots)
-			
-			
+
 			Sym_BB_Eq.append(Sym_BB[sym_i] * Eq_BB)
+			
+			if sym_i > 1:
+				Eq_BB = UpdateEqPilots(Sym_BB_Eq[sym_i], Eq_BB, pilots)
+
+			Sym_BB_Eq_x.append(Sym_BB[sym_i] * Eq_BB)
+			
 		
-			# Plot the equalized subcarrier I/Q in blue
+			# Plot the equalized subcarrier I/Q
 			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB_Eq[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq[sym_i][bin_0: bin_max+1].imag, color='red', s=2)
+			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].imag, color='blue', s=2)
 			
 			# Plot the equalized pilots
 			for p in pilots:
@@ -485,12 +498,12 @@ def main():
 		for sym_i in range(1,4,1):
 			i = 0
 			for bin_i in range(bin_0,bin_max+1,1):
-				Error_Mags[i] += np.abs((np.abs(Sym_BB_Eq[sym_i][bin_i]) - 1))
+				Error_Mags[i] += np.abs((np.abs(Sym_BB_Eq_x[sym_i][bin_i]) - 1))
 				if bin_i in p_i:
 					angle_tgt = 90
 				else:
 					angle_tgt = 45
-				ea = np.abs(np.angle(Sym_BB_Eq[sym_i][bin_i], deg=True) - angle_tgt)
+				ea = np.abs(np.angle(Sym_BB_Eq_x[sym_i][bin_i], deg=True) - angle_tgt)
 				while(ea > 45):
 					ea -= 90
 				Error_Angles[i] += abs(ea)
@@ -503,13 +516,13 @@ def main():
 	Error_Sym_n = 3 * len(Sync_List)
 	fig,ax = plt.subplots(1,2, layout='constrained')
 	plt.suptitle(f'Error Analysis over {Error_Sym_n} Symbols\nMeasured SNR: {Avg_SNR_dB:.1f} dB')
-	ax[0].set_title(f'Magnitude Error')
+	ax[0].set_title(f'Magnitude Error\nAvg {np.average(100*Error_Mags/Error_Sym_n):.1f}%')
 	ax[0].scatter(Error_Freqs,100*Error_Mags/Error_Sym_n, s=6)
 	ax[0].set_ylabel('Absolute Magnitude Error, %')
 	ax[0].set_xlabel('Frequency, Hz')
 	ax[0].set_ylim(0,50)
 	ax[0].grid(True)
-	ax[1].set_title(f'Angle Error')
+	ax[1].set_title(f'Angle Error\nAvg {np.average(Error_Angles/Error_Sym_n):.1f} deg')
 	ax[1].scatter(Error_Freqs,Error_Angles/Error_Sym_n, s=6)
 	ax[1].set_ylabel('Absolute Angle Error, Deg')
 	ax[1].set_ylim(0,45)
