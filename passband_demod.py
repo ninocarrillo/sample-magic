@@ -26,7 +26,7 @@ def UpdateEqPilots(symbol, eq, pilots):
 	# Create an array of phase corrections for each bin:
 	phase_correction = np.zeros(len(eq))
 	for i in range(len(eq)):
-		phase_correction[i] = e_avg * i
+		phase_correction[i] = e_avg * i * 0.175
 	print(f'Avg pilot error: {e_avg*180/np.pi:.3f} deg/bin')
 	# Adjust the equalizer phase:
 	p = np.exp(1j*phase_correction)
@@ -446,14 +446,14 @@ def main():
 			Sym_BB_Eq.append(Sym_BB[sym_i] * Eq_BB)
 			
 			if sym_i > 1:
-				Eq_BB = UpdateEqPilots(Sym_BB_Eq[sym_i], Eq_BB, pilots)
+				Eq_BB = UpdateEqPilots(Sym_BB_Eq[sym_i-1], Eq_BB, pilots)
 
 			Sym_BB_Eq_x.append(Sym_BB[sym_i] * Eq_BB)
 			
 		
 			# Plot the equalized subcarrier I/Q
 			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB_Eq[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq[sym_i][bin_0: bin_max+1].imag, color='red', s=2)
-			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].imag, color='blue', s=2)
+			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].imag, color='green', s=2)
 			
 			# Plot the equalized pilots
 			for p in pilots:
@@ -522,7 +522,7 @@ def main():
 	ax[0].set_xlabel('Frequency, Hz')
 	ax[0].set_ylim(0,50)
 	ax[0].grid(True)
-	ax[1].set_title(f'Angle Error\nAvg {np.average(Error_Angles/Error_Sym_n):.1f} deg')
+	ax[1].set_title(f'Angle Error\nAvg {np.average(Error_Angles/Error_Sym_n):.3f} deg')
 	ax[1].scatter(Error_Freqs,Error_Angles/Error_Sym_n, s=6)
 	ax[1].set_ylabel('Absolute Angle Error, Deg')
 	ax[1].set_ylim(0,45)
