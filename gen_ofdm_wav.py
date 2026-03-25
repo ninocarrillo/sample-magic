@@ -110,6 +110,7 @@ def GenProbe(sym_n, pre_n, start_carrier, end_carrier):
 	return sc_audio.real
 
 def GenConstellation(bits):
+	max_iter = 1000
 	constellation = []
 	if bits == 1:
 		constellation.append(1+0j)
@@ -130,43 +131,56 @@ def GenConstellation(bits):
 				constellation.append(x*coord+y*coord*1j)
 	elif bits >= 4:
 		# Try something different
+		# make a map of regular hexagons, with the goal of 
+		# maximizing their size
+		hexagon_ratio = np.sqrt(3) / 2
 		target_len = np.power(2,bits)
-		len_c = 0
-		step = 1
-		rad = 0
-		e = 0
-		while (len_c != target_len) or (rad < .9) or (e < 0.5):
-			x = -1
-			y = -1
-			x += np.random.rand() * step
-			even_odd = 0
-			constellation = []
-			while y <= 1:
-				new_point = x + (1j * y)
-				#print(f'  {new_point:.3f}')
-				x += step
-				if x > 1:
-					x = x - 2
-					if even_odd % 2:
-						x += step/2
-					y += step
-				even_odd += 1
-				if np.abs(new_point) <= 1:
-					constellation.append(new_point)
-			len_c = len(constellation)
-			if len_c < target_len:
-				#step is too big
-				step /= 2
-			elif len_c > target_len:
-				#step is too small
-				step *= 1.5
-			elif len_c  == target_len:
-				step *= 1.5
-			rad = np.max(np.abs(constellation))
-			e = np.sum(np.power(np.abs(constellation),2)) / np.power(2,bits)
-			#print(f'step: {step:.3f}, len: {len_c}, rad: {rad:.3f}')
-		print(f'Bits: {bits}, Step: {step:.6f}, Rad: {rad:.3f}, e: {e:.3f}')
-
+		iter_results = []
+		for i in range(max_iter):
+			len_c = 0
+			step = 1
+			rad = 0
+			e = 0
+			while (len_c != target_len):
+				x = -1
+				y = -1
+				x_offset = step * np.random.rand()
+				y_offset = step * np.random.rand()
+				y -= y_offset
+				x -= x_offset
+				even_odd = 0
+				constellation = []
+				while y <= 1:
+					new_point = x + (1j * y)
+					x += step
+					if x > 1:
+						x = -1-x_offset
+						y += step * hexagon_ratio
+						even_odd += 1
+						if even_odd % 2:
+							x += step/ 2
+					if np.abs(new_point) <= 1:
+						constellation.append(new_point)
+				len_c = len(constellation)
+				if len_c < target_len:
+					#step is too big
+					step /= 2
+				elif len_c > target_len:
+					#step is too small
+					step *= 1.5
+				elif len_c  == target_len:
+					step *= 1.5
+			results = [step, x_offset, y_offset, constellation]
+			iter_results.append(results)
+		sorted_iter_results = sorted(iter_results, key=lambda x: x[0])
+		constellation = sorted_iter_results[0][3]
+		print(sorted_iter_results[-1][0:3])
+		steps = np.zeros(max_iter)
+		for i in range(max_iter):
+			steps[i] = sorted_iter_results[i][0]
+		plt.figure()
+		plt.plot(steps)
+		plt.show()
 	# draw a unit circle
 	circle_points = 1000
 	circle_coords = np.zeros(circle_points, dtype='complex')
