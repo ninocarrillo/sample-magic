@@ -54,7 +54,7 @@ def CalcEq(rx_symbol, ref_symbol):
 	for i in range(len(eq)): # step thru every equalizer tap
 		if i % 2:
 			# Odd subcarrier, only noise here
-			# Computer the noise energy and sum it
+			# Compute the noise energy and sum it
 			noise_e += np.power(np.abs(rx_symbol[i]),2)
 			# now zero this equalizer bin, prep for interpolation
 			eq[i] = 0
@@ -88,11 +88,14 @@ def CalcEq(rx_symbol, ref_symbol):
 	offset = len(interp_filter) // 2
 	# Discard delayed samples to re-align equalizer taps to bins
 	eq = eq[offset:-offset]
-	# Do another pass with an ma filter
+	# Do another pass with a moving average filter
 	interp_filter = np.ones(3)/3
 	eq = np.convolve(eq, interp_filter, mode='full')
 	offset = len(interp_filter) // 2
 	eq = eq[offset:-offset]
+	# Return the complete equalizer, as an array of complex tap values. Also return 
+	# linear SNR. 
+	# Apply the equalizer by performing dot product to the received symbol (FFT output).
 	return eq.conj(), snr
 
 def PlotPilots(start_carrier, end_carrier, pilot_count):
@@ -249,7 +252,8 @@ def main():
 
 
 	pilot_n = 4
-	pilots = PlotPilots(int(round(1500/bin_width)), int(round(2500/bin_width)), pilot_n)
+	pilots = PlotPilots(bin_0, bin_max, pilot_n)
+	#pilots = PlotPilots(int(round(1500/bin_width)), int(round(2500/bin_width)), pilot_n)
 
 	freq = np.fft.fftfreq(fft_n, 1/audio_sample_rate)
 
