@@ -87,10 +87,10 @@ def CalcEq(rx_symbol, ref_symbol):
 	# Discard delayed samples to re-align equalizer taps to bins
 	eq = eq[offset:-offset]
 	# Do another pass with an ma filter
-	#interp_filter = np.ones(5)/5
-	#eq = np.convolve(eq, interp_filter, mode='full')
-	#offset = len(interp_filter) // 2
-	#eq = eq[offset:-offset]
+	interp_filter = np.ones(3)/3
+	eq = np.convolve(eq, interp_filter, mode='full')
+	offset = len(interp_filter) // 2
+	eq = eq[offset:-offset]
 	return eq.conj(), snr
 
 def PlotPilots(start_carrier, end_carrier, pilot_count):
@@ -518,7 +518,7 @@ def main():
 	# Plot all the data symbols on one I/Q chart:
 	plt.figure()
 	for sym_i in range(1,8):
-		plt.scatter(Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].imag,s=1)
+		plt.scatter(Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].imag,s=1, color='blue')
 	plt.show()
 
 	Avg_SNR_Lin /= len(Sync_List)
