@@ -89,7 +89,7 @@ def GenSCWidePre(sym_n, pre_n, start_carrier, end_carrier, start_data_carrier, e
 	# Generate the audio
 	sc_audio = ifft(baseband, sym_n)
 	# Scale the audio based on carriers in use
-	sc_audio *= sym_n / (end_carrier - start_carrier)
+	sc_audio *= sym_n / (end_data_carrier - start_data_carrier)
 	# prepend cyclic prefix
 	sc_audio = np.concatenate([sc_audio[-pre_n:], sc_audio])
 	return sc_audio.real
@@ -99,6 +99,91 @@ def GenProbe(sym_n, pre_n, start_carrier, end_carrier):
 	coord = np.sqrt(2)/2
 	for i in range(start_carrier, end_carrier+1):
 		baseband[i] = np.random.choice([-coord,coord]) + (np.random.choice([-coord,coord]) * 1j)
+		if i > 0:
+			baseband[(sym_n - i)] = baseband[i].conj()
+	# Generate the audio
+	sc_audio = ifft(baseband, sym_n)
+	# Scale the audio based on carriers in use
+	sc_audio *= sym_n / (end_carrier - start_carrier)
+	# prepend cyclic prefix
+	sc_audio = np.concatenate([sc_audio[-pre_n:], sc_audio])
+	return sc_audio.real
+
+
+def GenRandomQAM(sym_n, pre_n, start_carrier, end_carrier, pilots, bits):
+	baseband = np.zeros(sym_n, dtype='complex')
+	constellation = []
+	if bits == 1:
+		constellation.append(1+0j)
+		constellation.append(-1+0j)
+	elif bits == 2:
+		coord = np.sqrt(2)/2
+		for x in range(-1,2,2):
+			for y in range(-1,2,2):
+				constellation.append(x*coord+y*coord*1j)
+	elif bits == 3:
+		angle = 2 * np.pi / 8
+		for i in range(8):
+			constellation.append(np.exp(1j*i*angle))
+	elif bits == 41: # traditional qam-16
+		coord = np.sqrt(2)/6
+		for x in range(-3,4,2):
+			for y in range(-3,4,2):
+				constellation.append(x*coord+y*coord*1j)
+	elif bits == 42:
+		# Goldberg 1971
+		# Start with 11 points around the unit circle
+		angle = 2 * np.pi / 11
+		phase = 0
+		for i in range(11):
+			constellation.append(np.exp(1j*((i*angle)+phase)))
+		# Now add 5 points on an inner ring
+		angle = 2 * np.pi / 5
+		phase = np.pi
+		mag = (3.115/4.615)*(4.115/4.615)
+		for i in range(5):
+			constellation.append(mag*np.exp(1j*((i*angle)+phase)))
+	elif bits >= 4:
+		# Try something different
+		target_len = np.power(2,bits)
+		len_c = 0
+		step = 1
+		while len_c != target_len:
+			x = -1
+			y = -1
+			constellation = []
+			while y <= 1:
+				new_point = x + (1j * y)
+				#print(f'  {new_point:.3f}')
+				x += step
+				if x > 1:
+					x -= 2
+					y += step
+				if np.abs(new_point) <= 1:
+					constellation.append(new_point)
+			len_c = len(constellation)
+			if len_c < target_len:
+				#step is too big
+				step /= 2
+			elif len_c > target_len:
+				#step is too small
+				step *= 1.5
+		print(f'Bits: {bits}, Step: {step:.4f}')
+
+	elif bits == 81:
+		coord = np.sqrt(2)/18
+		for x in range(-9,10,2):
+			for y in range(-9,10,2):
+				constellation.append(x*coord+y*coord*1j)
+
+
+	for i in range(start_carrier, end_carrier+1):
+		baseband[i] = np.random.choice(constellation)
+	# Add pilot carriers
+	for pilot in pilots:
+		baseband[pilot[0]] = pilot[1]
+	# Make real by setting conjugates negative:
+	for i in range(start_carrier, end_carrier+1):
 		if i > 0:
 			baseband[(sym_n - i)] = baseband[i].conj()
 	# Generate the audio
@@ -241,10 +326,9 @@ def main():
 	# Generate Schmidl-Cox preamble
 	audio_samples = np.zeros(fft_n+cp_n)
 	audio_samples = np.concatenate([audio_samples,GenSCWidePre(fft_n, cp_n, sc_bin_0, sc_bin_max, bin_0, bin_max, 0)])
-	audio_samples = np.concatenate([audio_samples, GenRandomQPSK(fft_n, cp_n, bin_0, bin_0+bin_n, pilots)])
-	audio_samples = np.concatenate([audio_samples, GenRandomQPSK(fft_n, cp_n, bin_0, bin_0+bin_n, pilots)])
-	audio_samples = np.concatenate([audio_samples, GenRandomQPSK(fft_n, cp_n, bin_0, bin_0+bin_n, pilots)])
-	audio_samples = np.concatenate([audio_samples, GenRandomQPSK(fft_n, cp_n, bin_0, bin_0+bin_n, pilots)])
+	audio_samples = np.concatenate([audio_samples, GenRandomQAM(fft_n, cp_n, bin_0, bin_0+bin_n, pilots, 4)])
+	audio_samples = np.concatenate([audio_samples, GenRandomQAM(fft_n, cp_n, bin_0, bin_0+bin_n, pilots, 5)])
+	audio_samples = np.concatenate([audio_samples, GenRandomQAM(fft_n, cp_n, bin_0, bin_0+bin_n, pilots, 6)])
 	audio_samples = np.concatenate([audio_samples, np.zeros(fft_n+cp_n)])
 	
 

@@ -13,7 +13,7 @@ from scipy.signal import savgol_filter
 
 
 def UpdateEqPilots(symbol, eq, pilots):
-	pilot_correction = 1j
+	pilot_correction = 1
 	p_errors = np.zeros(len(pilots))
 	for i in range(len(pilots)):
 		p_errors[i] = (((np.angle(symbol[pilots[i][0]]) - np.angle(pilots[i][1]*pilot_correction)) + np.pi/2) % np.pi) - (np.pi/2)
@@ -66,7 +66,7 @@ def CalcEq(rx_symbol, ref_symbol):
 	if noise_e > 0: # avoid divide-by-zero
 		snr = sig_e / noise_e
 	else: # set some maximum snr
-		snr = 1e5
+		snr = 1e6
 	# Interpolate the empty equalizer bins.
 	# The interpolation filter computes the average of the two surrounding bins for
 	# every empty bin.
@@ -78,6 +78,7 @@ def CalcEq(rx_symbol, ref_symbol):
 	# The magnitude error is approximately the inverse of the cosine of half the angle of
 	# separation between the two surrounding occupied equalizer taps.
 	interp_filter = np.array([.5,1,0.5])
+	#interp_filter = np.array([1/3,1/2,1/3,1/2,1/3])
 	# Do the filter convolution
 	eq = np.convolve(eq, interp_filter, mode='full')
 	# Remove the filter delay:
@@ -85,6 +86,11 @@ def CalcEq(rx_symbol, ref_symbol):
 	offset = len(interp_filter) // 2
 	# Discard delayed samples to re-align equalizer taps to bins
 	eq = eq[offset:-offset]
+	# Do another pass with an ma filter
+	#interp_filter = np.ones(5)/5
+	#eq = np.convolve(eq, interp_filter, mode='full')
+	#offset = len(interp_filter) // 2
+	#eq = eq[offset:-offset]
 	return eq.conj(), snr
 
 def PlotPilots(start_carrier, end_carrier, pilot_count):
@@ -427,12 +433,12 @@ def main():
 			ax[sg[sym_i][0],sg[sym_i][1]].grid(True)
 		
 			# Plot the unequalized subcarrier I/Q in grey
-			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB[sym_i][bin_0: bin_max+1].real,Sym_BB[sym_i][bin_0: bin_max+1].imag, color='grey', s=1)
+			#ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB[sym_i][bin_0: bin_max+1].real,Sym_BB[sym_i][bin_0: bin_max+1].imag, color='grey', s=1)
 
 			# Plot the unequalized pilots
-			if sym_i > 0: # no pilots in preamble
-				for p in pilots:
-					ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB[sym_i][p[0]].real],[0,Sym_BB[sym_i][p[0]].imag], color='grey', linewidth=1)
+			#if sym_i > 0: # no pilots in preamble
+			#	for p in pilots:
+			#		ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB[sym_i][p[0]].real],[0,Sym_BB[sym_i][p[0]].imag], color='grey', linewidth=1)
 
 		# Collect equalization data from the Schmidle Cox preamble:
 		Eq_BB, SNR_lin = CalcEq(Sym_BB[0],Ref_BB)
