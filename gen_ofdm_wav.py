@@ -109,9 +109,7 @@ def GenProbe(sym_n, pre_n, start_carrier, end_carrier):
 	sc_audio = np.concatenate([sc_audio[-pre_n:], sc_audio])
 	return sc_audio.real
 
-
-def GenRandomQAM(sym_n, pre_n, start_carrier, end_carrier, pilots, bits):
-	baseband = np.zeros(sym_n, dtype='complex')
+def GenConstellation(bits):
 	constellation = []
 	if bits == 1:
 		constellation.append(1+0j)
@@ -148,7 +146,8 @@ def GenRandomQAM(sym_n, pre_n, start_carrier, end_carrier, pilots, bits):
 		target_len = np.power(2,bits)
 		len_c = 0
 		step = 1
-		while len_c != target_len:
+		rad = 0
+		while (len_c != target_len) or (rad < .999):
 			x = -1
 			y = -1
 			constellation = []
@@ -168,14 +167,27 @@ def GenRandomQAM(sym_n, pre_n, start_carrier, end_carrier, pilots, bits):
 			elif len_c > target_len:
 				#step is too small
 				step *= 1.5
-		print(f'Bits: {bits}, Step: {step:.4f}')
+			elif len_c  == target_len:
+				step *= 1.5
+			rad = np.max(np.abs(constellation))
+		print(f'Bits: {bits}, Step: {step:.6f}, Rad: {rad:.3f}')
 
 	elif bits == 81:
 		coord = np.sqrt(2)/18
 		for x in range(-9,10,2):
 			for y in range(-9,10,2):
 				constellation.append(x*coord+y*coord*1j)
+	plt.figure(figsize=(4,4))
+	for coord in constellation:
+		plt.scatter(coord.real, coord.imag, color='blue', s=1)
+	plt.title(f'{bits}-bit QAM constellation')
+	plt.ylim(-1,1)
+	plt.xlim(-1,1)
+	plt.show()
+	return(constellation)
 
+def GenRandomQAM(sym_n, pre_n, start_carrier, end_carrier, pilots, constellation):
+	baseband = np.zeros(sym_n, dtype='complex')
 
 	for i in range(start_carrier, end_carrier+1):
 		baseband[i] = np.random.choice(constellation)
@@ -264,11 +276,11 @@ def main():
 		sys.exit(1)
 	# check correct number of parameters were passed to command line
 	if len(sys.argv) != 5:
-		print("Incorrect arg count. Usage: python3 gen_ofdm_wav.py <dac bits> <symbol count> <repeat count> <output wav file>")
+		print("Incorrect arg count. Usage: python3 gen_ofdm_wav.py <dac bits> <qam bits> <repeat count> <output wav file>")
 		sys.exit(2)
 
 	dac_bits = int(sys.argv[1])
-	symbol_count = int(sys.argv[2])
+	qam_bits = int(sys.argv[2])
 	repeat_n = int(sys.argv[3])
 	wav_file_name = sys.argv[4]
 	audio_sample_rate = 12000
@@ -326,9 +338,16 @@ def main():
 	# Generate Schmidl-Cox preamble
 	audio_samples = np.zeros(fft_n+cp_n)
 	audio_samples = np.concatenate([audio_samples,GenSCWidePre(fft_n, cp_n, sc_bin_0, sc_bin_max, bin_0, bin_max, 0)])
-	audio_samples = np.concatenate([audio_samples, GenRandomQAM(fft_n, cp_n, bin_0, bin_0+bin_n, pilots, 4)])
-	audio_samples = np.concatenate([audio_samples, GenRandomQAM(fft_n, cp_n, bin_0, bin_0+bin_n, pilots, 5)])
-	audio_samples = np.concatenate([audio_samples, GenRandomQAM(fft_n, cp_n, bin_0, bin_0+bin_n, pilots, 6)])
+	constellation = GenConstellation(qam_bits)
+
+	audio_samples = np.concatenate([audio_samples, GenRandomQAM(fft_n, cp_n, bin_0, bin_0+bin_n, pilots, constellation)])
+	audio_samples = np.concatenate([audio_samples, GenRandomQAM(fft_n, cp_n, bin_0, bin_0+bin_n, pilots, constellation)])
+	audio_samples = np.concatenate([audio_samples, GenRandomQAM(fft_n, cp_n, bin_0, bin_0+bin_n, pilots, constellation)])
+	audio_samples = np.concatenate([audio_samples, GenRandomQAM(fft_n, cp_n, bin_0, bin_0+bin_n, pilots, constellation)])
+	audio_samples = np.concatenate([audio_samples, GenRandomQAM(fft_n, cp_n, bin_0, bin_0+bin_n, pilots, constellation)])
+	audio_samples = np.concatenate([audio_samples, GenRandomQAM(fft_n, cp_n, bin_0, bin_0+bin_n, pilots, constellation)])
+	audio_samples = np.concatenate([audio_samples, GenRandomQAM(fft_n, cp_n, bin_0, bin_0+bin_n, pilots, constellation)])
+	audio_samples = np.concatenate([audio_samples, GenRandomQAM(fft_n, cp_n, bin_0, bin_0+bin_n, pilots, constellation)])
 	audio_samples = np.concatenate([audio_samples, np.zeros(fft_n+cp_n)])
 	
 

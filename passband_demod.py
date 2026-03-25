@@ -397,7 +397,7 @@ def main():
 
 	fudge = cp_n //2
 	
-	sg = [[0,1],[0,2],[1,1],[1,2]]
+	sg = [[0,1],[0,2],[0,3],[0,4],[1,1],[1,2],[1,3],[1,4]]
 
 
 	Error_Mags = np.zeros(bin_n)
@@ -409,7 +409,7 @@ def main():
 		Ref_BB = GenSCWidePreBB(fft_n, cp_n, sc_bin_0, sc_bin_max, bin_0, bin_max, 0)
 		# Calculate reference error this will be zeros)
 		Eq_BB = CalcEq(Ref_BB, Ref_BB)
-		fig,ax = plt.subplots(2,3, figsize=(12,8), layout='constrained')
+		fig,ax = plt.subplots(2,5, figsize=(12,8), layout='constrained')
 		plt.suptitle(f'Sample start: {SC_Peak_Sample}')
 		#fig.tight_layout()
 
@@ -420,7 +420,7 @@ def main():
 		Sym_BB = []
 		Sym_BB_Eq = []
 		Sym_BB_Eq_x = []
-		for sym_i in range(4):
+		for sym_i in range(8):
 			try:
 				Sym_BB.append(np.fft.fft(baseband_samples[Start_i:Start_i + fft_n])*bin_n/fft_n)
 			except:
@@ -445,7 +445,7 @@ def main():
 		Avg_SNR_Lin += SNR_lin
 		SNR_dB = 10*np.log10(SNR_lin)
 
-		for sym_i in range(4):
+		for sym_i in range(8):
 			
 			# Refine the equalizer time offset based on the pilots of the previous symbol:
 
@@ -514,6 +514,12 @@ def main():
 					ea -= 90
 				Error_Angles[i] += abs(ea)
 				i += 1
+				
+	# Plot all the data symbols on one I/Q chart:
+	plt.figure()
+	for sym_i in range(1,8):
+		plt.scatter(Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].imag,s=1)
+	plt.show()
 
 	Avg_SNR_Lin /= len(Sync_List)
 	Avg_SNR_dB = 10*np.log10(SNR_lin)
