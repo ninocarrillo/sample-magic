@@ -128,36 +128,29 @@ def GenConstellation(bits):
 		for x in range(-3,4,2):
 			for y in range(-3,4,2):
 				constellation.append(x*coord+y*coord*1j)
-	elif bits == 42:
-		# Goldberg 1971
-		# Start with 11 points around the unit circle
-		angle = 2 * np.pi / 11
-		phase = 0
-		for i in range(11):
-			constellation.append(np.exp(1j*((i*angle)+phase)))
-		# Now add 5 points on an inner ring
-		angle = 2 * np.pi / 5
-		phase = np.pi
-		mag = (3.115/4.615)*(4.115/4.615)
-		for i in range(5):
-			constellation.append(mag*np.exp(1j*((i*angle)+phase)))
 	elif bits >= 4:
 		# Try something different
 		target_len = np.power(2,bits)
 		len_c = 0
 		step = 1
 		rad = 0
-		while (len_c != target_len) or (rad < .999):
+		e = 0
+		while (len_c != target_len) or (rad < .9) or (e < 0.5):
 			x = -1
 			y = -1
+			x += np.random.rand() * step
+			even_odd = 0
 			constellation = []
 			while y <= 1:
 				new_point = x + (1j * y)
 				#print(f'  {new_point:.3f}')
 				x += step
 				if x > 1:
-					x -= 2
+					x = x - 2
+					if even_odd % 2:
+						x += step/2
 					y += step
+				even_odd += 1
 				if np.abs(new_point) <= 1:
 					constellation.append(new_point)
 			len_c = len(constellation)
@@ -170,16 +163,21 @@ def GenConstellation(bits):
 			elif len_c  == target_len:
 				step *= 1.5
 			rad = np.max(np.abs(constellation))
-		print(f'Bits: {bits}, Step: {step:.6f}, Rad: {rad:.3f}')
+			e = np.sum(np.power(np.abs(constellation),2)) / np.power(2,bits)
+			#print(f'step: {step:.3f}, len: {len_c}, rad: {rad:.3f}')
+		print(f'Bits: {bits}, Step: {step:.6f}, Rad: {rad:.3f}, e: {e:.3f}')
 
-	elif bits == 81:
-		coord = np.sqrt(2)/18
-		for x in range(-9,10,2):
-			for y in range(-9,10,2):
-				constellation.append(x*coord+y*coord*1j)
-	plt.figure(figsize=(4,4))
+	# draw a unit circle
+	circle_points = 1000
+	circle_coords = np.zeros(circle_points, dtype='complex')
+	
+	for i in range(1000):
+		circle_coords[i]=np.exp(2j*np.pi*i/circle_points)
+
+	plt.figure(figsize=(6,6))
+	plt.plot(circle_coords.real, circle_coords.imag, color='grey', linewidth=1)
 	for coord in constellation:
-		plt.scatter(coord.real, coord.imag, color='blue', s=1)
+		plt.scatter(coord.real, coord.imag, color='blue', s=5)
 	plt.title(f'{bits}-bit QAM constellation')
 	plt.ylim(-1,1)
 	plt.xlim(-1,1)
