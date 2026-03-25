@@ -321,7 +321,7 @@ def main():
 	sc_bin_n = (sc_bin_max - sc_bin_0) + 1
 	bin_n = (bin_max - bin_0) + 1
 	data_carrier_n = bin_n - pilot_n
-	pilots = PlotPilots(bin_0, bin_max, pilot_n)
+	pilots = PlotPilots(int(round(1500/bin_width)), int(round(2500/bin_width)), pilot_n)
 
 
 	print(f'Audio Sample Rate: {audio_sample_rate}')

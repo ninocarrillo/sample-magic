@@ -25,13 +25,15 @@ def UpdateEqPilots(symbol, eq, pilots):
 	e_avg = np.average(p_errors)
 	# Create an array of phase corrections for each bin:
 	phase_correction = np.zeros(len(eq))
+	feedback_gain = 0.175
+	#feedback_gain = 0
 	for i in range(len(eq)):
-		phase_correction[i] = e_avg * i * 0.175
+		phase_correction[i] = e_avg * i * feedback_gain
 	print(f'Avg pilot error: {e_avg*180/np.pi:.3f} deg/bin')
 	# Adjust the equalizer phase:
 	p = np.exp(1j*phase_correction)
-	eq *= p.conj()
-	return eq
+	#eq *= p.conj()
+	return p.conj()
 
 
 def CalcEq(rx_symbol, ref_symbol):
@@ -66,7 +68,7 @@ def CalcEq(rx_symbol, ref_symbol):
 	if noise_e > 0: # avoid divide-by-zero
 		snr = sig_e / noise_e
 	else: # set some maximum snr
-		snr = 1e6
+		snr = 1e9
 	# Interpolate the empty equalizer bins.
 	# The interpolation filter computes the average of the two surrounding bins for
 	# every empty bin.
@@ -77,7 +79,7 @@ def CalcEq(rx_symbol, ref_symbol):
 	# the interpolated point would be the same but the magnitude would be slightly higher.
 	# The magnitude error is approximately the inverse of the cosine of half the angle of
 	# separation between the two surrounding occupied equalizer taps.
-	interp_filter = np.array([.5,1,0.5])
+	interp_filter = np.array([0.5,1,0.5])
 	#interp_filter = np.array([1/3,1/2,1/3,1/2,1/3])
 	# Do the filter convolution
 	eq = np.convolve(eq, interp_filter, mode='full')
@@ -225,9 +227,6 @@ def main():
 	sc_bin_n = (sc_bin_max - sc_bin_0) + 1
 
 
-	pilot_n = 4
-	pilots = PlotPilots(bin_0, bin_max, pilot_n)
-
 	try:
 		audio_sample_rate, audio_samples  = readwav(sys.argv[1])
 	except:
@@ -248,6 +247,9 @@ def main():
 	print(f'Symbol Rate: {sym_rate:.2f}')
 	print(f'Cyclic Prefix time: {1000*cp_n/audio_sample_rate:.2f} mS, {100*cp_n / (cp_n + fft_n):.1f}%')
 
+
+	pilot_n = 4
+	pilots = PlotPilots(int(round(1500/bin_width)), int(round(2500/bin_width)), pilot_n)
 
 	freq = np.fft.fftfreq(fft_n, 1/audio_sample_rate)
 
@@ -452,9 +454,10 @@ def main():
 			Sym_BB_Eq.append(Sym_BB[sym_i] * Eq_BB)
 			
 			if sym_i > 1:
-				Eq_BB = UpdateEqPilots(Sym_BB_Eq[sym_i-1], Eq_BB, pilots)
-
-			Sym_BB_Eq_x.append(Sym_BB[sym_i] * Eq_BB)
+				p_eq = UpdateEqPilots(Sym_BB_Eq[sym_i], Eq_BB, pilots)
+				Sym_BB_Eq_x.append(Sym_BB_Eq[sym_i] * p_eq)
+			else:
+				Sym_BB_Eq_x.append(Sym_BB_Eq[sym_i])
 			
 		
 			# Plot the equalized subcarrier I/Q
@@ -464,7 +467,7 @@ def main():
 			# Plot the equalized pilots
 			for p in pilots:
 				if sym_i > 0: # no pilots in preamble
-					ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB_Eq[sym_i][p[0]].real],[0,Sym_BB_Eq[sym_i][p[0]].imag], color='blue', linewidth=1)
+					ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB_Eq_x[sym_i][p[0]].real],[0,Sym_BB_Eq_x[sym_i][p[0]].imag], color='blue', linewidth=1)
 
 
 		
