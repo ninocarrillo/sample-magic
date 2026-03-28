@@ -252,8 +252,8 @@ def main():
 
 
 	pilot_n = 4
-	pilots = PlotPilots(bin_0, bin_max, pilot_n)
-	#pilots = PlotPilots(int(round(1500/bin_width)), int(round(2500/bin_width)), pilot_n)
+	#pilots = PlotPilots(bin_0, bin_max, pilot_n)
+	pilots = PlotPilots(int(round(1500/bin_width)), int(round(2500/bin_width)), pilot_n)
 
 	freq = np.fft.fftfreq(fft_n, 1/audio_sample_rate)
 

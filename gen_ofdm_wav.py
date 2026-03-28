@@ -365,13 +365,6 @@ def main():
 
 	audio_samples = np.tile(audio_samples, repeat_n)
 
-	
-	plt.figure()
-	plt.plot(audio_samples.real)
-	plt.plot(audio_samples.imag)
-	plt.legend(['real','imag'])
-	plt.title('Audio Samples')
-	plt.show()
 
 
 	# Perform FFT analysis of modulation stages
@@ -395,12 +388,49 @@ def main():
 	
 	# convert audio samples to integer real values
 	
-	audio_samples = audio_samples.real
-	audio_samples *= (np.power(2,dac_bits-1) - 1)
-	audio_samples = np.round(audio_samples,0)
+	wav_out_1 = audio_samples.real
+	wav_out_1 = np.multiply(wav_out_1, 1/max(np.abs(wav_out_1)))
+	wav_out_1 = np.multiply(wav_out_1,np.power(2,dac_bits-1) - 1)
+	wav_out_1 = np.round(wav_out_1,0)
+	wav_out_1 = np.multiply(wav_out_1, np.power(2,16-dac_bits) - 1)
 
 	# Write wavfile out
-	writewav(wav_file_name, int(audio_sample_rate), audio_samples.astype(np.int16))
+	writewav(wav_file_name, int(audio_sample_rate), wav_out_1.astype(np.int16))
+	
+	# Simulate the dsPIC DAC. Oversample by 7x and reduce to 8-bit resolution:
+	dac_interp_fir = firwin(21,[3500],fs=84000)
+	wav_out_2 = np.zeros(len(audio_samples) * 7)
+	for i in range(len(wav_out_2)):
+		if i % 7 == 0:
+			wav_out_2[i] = audio_samples[i//7].real
+	wav_out_2 = np.convolve(wav_out_2, dac_interp_fir, mode='full')
+	
+	wav_out_2 = np.multiply(wav_out_2, 1/max(np.abs(wav_out_2)))
+	wav_out_2 = np.multiply(wav_out_2,(np.power(2,dac_bits-1) - 1))
+	wav_out_2 = np.round(wav_out_2,0)
+	wav_out_2 = np.multiply(wav_out_2,np.power(2,16-dac_bits) - 1)
+
+	dac_psd = AnalyzeSpectrum(wav_out_2, 84000, 0.99)
+	fig, ax = plt.subplots(1,3)
+	fig.tight_layout()
+	plt.subplot(131)
+	plt.plot(wav_out_2, linewidth=1)
+	plt.title("DAC Samples")
+	plt.subplot(132)
+	plt.plot(dac_interp_fir, linewidth=1)
+	plt.title("Interp FIR Taps")
+	plt.subplot(133)
+	plt.plot(dac_psd[0], dac_psd[1], '.', ms=2)
+	plt.xlim(-20000, 20000)
+	plt.ylim(-100,10)
+	plt.ylabel("dBFS")
+	plt.xlabel("Frequency, Hz")
+	plt.title("DAC spectrum")
+	plt.grid(True)
+	plt.show()
+
+	writewav("../interp.wav", int(audio_sample_rate*7), wav_out_2.astype(np.int16))
+	
 			
 
 if __name__ == "__main__":
