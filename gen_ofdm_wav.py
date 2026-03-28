@@ -398,7 +398,7 @@ def main():
 	writewav(wav_file_name, int(audio_sample_rate), wav_out_1.astype(np.int16))
 	
 	# Simulate the dsPIC DAC. Oversample by 7x and reduce to 8-bit resolution:
-	dac_interp_fir = firwin(21,[3500],fs=84000)
+	dac_interp_fir = firwin(29,[4000],fs=84000)
 	wav_out_2 = np.zeros(len(audio_samples) * 7)
 	for i in range(len(wav_out_2)):
 		if i % 7 == 0:
