@@ -36,7 +36,7 @@ def UpdateEqPilots(symbol, eq, pilots):
 	return p.conj()
 
 
-def CalcEq(rx_symbol, ref_symbol):
+def CalcEq(preamble_fft, ref_fft):
 	# Calculate equalizer taps from the FFT of Schnmidl-Cox preamble symbol
 	# Preamble symbol only has data in even bins, which means we will need
 	# to interpolate equalizer taps for the odd bins. It also means we can
@@ -50,21 +50,21 @@ def CalcEq(rx_symbol, ref_symbol):
 	# This computes bins beyond those occupied in the waveform, because compute
 	# is cheap on my pc. Could make it more efficient in hardware by only doing
 	# the calculations on the bins that contain the waveform.
-	eq = ref_symbol.conj() * rx_symbol
-	for i in range(len(eq)): # step thru every equalizer tap
+	eq_taps = ref_fft.conj() * preamble_fft
+	for i in range(len(eq_taps)): # step thru every equalizer tap
 		if i % 2:
 			# Odd subcarrier, only noise here
 			# Compute the noise energy and sum it
-			noise_e += np.power(np.abs(rx_symbol[i]),2)
+			noise_e += np.power(np.abs(preamble_fft[i]),2)
 			# now zero this equalizer bin, prep for interpolation
-			eq[i] = 0
+			eq_taps[i] = 0
 		else:
 			# Even subcarrier, signal here
-			sig_e += np.power(np.abs(rx_symbol[i]),2)
-			if np.abs(eq[i]) > 0: # avoid divide-by-zero
-				eq[i] = eq[i] / np.power(np.abs(eq[i]),2)
+			sig_e += np.power(np.abs(preamble_fft[i]),2)
+			if np.abs(eq_taps[i]) > 0: # avoid divide-by-zero
+				eq_taps[i] = eq_taps[i] / np.power(np.abs(eq_taps[i]),2)
 			else: # in lieu of divide-by-zero, make this bin unity
-				eq[i] = 1
+				eq_taps[i] = 1
 	if noise_e > 0: # avoid divide-by-zero
 		snr = sig_e / noise_e
 	else: # set some maximum snr
@@ -82,21 +82,21 @@ def CalcEq(rx_symbol, ref_symbol):
 	interp_filter = np.array([0.5,1,0.5])
 	#interp_filter = np.array([1/3,1/2,1/3,1/2,1/3])
 	# Do the filter convolution
-	eq = np.convolve(eq, interp_filter, mode='full')
+	eq_taps = np.convolve(eq_taps, interp_filter, mode='full')
 	# Remove the filter delay:
 	# Divide filter length by two and floor the result
 	offset = len(interp_filter) // 2
 	# Discard delayed samples to re-align equalizer taps to bins
-	eq = eq[offset:-offset]
+	eq_taps = eq_taps[offset:-offset]
 	# Do another pass with a moving average filter
 	interp_filter = np.ones(3)/3
-	eq = np.convolve(eq, interp_filter, mode='full')
+	eq_taps = np.convolve(eq_taps, interp_filter, mode='full')
 	offset = len(interp_filter) // 2
-	eq = eq[offset:-offset]
+	eq_taps = eq_taps[offset:-offset]
 	# Return the complete equalizer, as an array of complex tap values. Also return 
 	# linear SNR. 
 	# Apply the equalizer by performing dot product to the received symbol (FFT output).
-	return eq.conj(), snr
+	return eq_taps.conj(), snr
 
 def PlotPilots(start_carrier, end_carrier, pilot_count):
 	pilot_indicies = []
@@ -252,8 +252,8 @@ def main():
 
 
 	pilot_n = 4
-	#pilots = PlotPilots(bin_0, bin_max, pilot_n)
-	pilots = PlotPilots(int(round(1500/bin_width)), int(round(2500/bin_width)), pilot_n)
+	pilots = PlotPilots(bin_0, bin_max, pilot_n)
+	#pilots = PlotPilots(int(round(1500/bin_width)), int(round(2500/bin_width)), pilot_n)
 
 	freq = np.fft.fftfreq(fft_n, 1/audio_sample_rate)
 
@@ -400,8 +400,6 @@ def main():
 
 
 	# Start sample for FFT should be in the center of the cyclic prefix
-
-	fudge = cp_n //2
 	
 	sg = [[0,1],[0,2],[0,3],[0,4],[1,1],[1,2],[1,3],[1,4]]
 
@@ -415,13 +413,12 @@ def main():
 		Ref_BB = GenSCWidePreBB(fft_n, cp_n, sc_bin_0, sc_bin_max, bin_0, bin_max, 0)
 		# Calculate reference error this will be zeros)
 		Eq_BB = CalcEq(Ref_BB, Ref_BB)
-		fig,ax = plt.subplots(2,5, figsize=(12,8), layout='constrained')
-		plt.suptitle(f'Sample start: {SC_Peak_Sample}')
+		fig,ax = plt.subplots(2,5, figsize=(15,7), layout='constrained')
+		plt.suptitle(f'Sample start: {SC_Peak_Sample}, pilot eq in green')
 		#fig.tight_layout()
 
-		SC_Offset = (2 * L) + fudge
+		SC_Offset = -cp_n // 2
 		Start_i = SC_Peak_Sample + SC_Offset
-		Start_i -= (fft_n + cp_n)
 
 		Sym_BB = []
 		Sym_BB_Eq = []
@@ -466,7 +463,7 @@ def main():
 		
 			# Plot the equalized subcarrier I/Q
 			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB_Eq[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq[sym_i][bin_0: bin_max+1].imag, color='red', s=2)
-			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].imag, color='green', s=2)
+			#ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].imag, color='green', s=2)
 			
 			# Plot the equalized pilots
 			for p in pilots:
@@ -493,7 +490,7 @@ def main():
 		ax[0,0].legend(legend)
 		ax[0,0].set_ylim(-0.5,3.5)
 		ax[0,0].grid(True)
-		ax[1,0] = fig.add_subplot(2,3,4, projection='polar')
+		ax[1,0] = fig.add_subplot(2,5,6, projection='polar')
 		ax[1,0].set_title('Channel Phase')
 		ax[1,0].scatter(np.angle(Eq_BB[bin_0:bin_max+1:2]),fft_freq[bin_0:bin_max+1:2], s=2, color=first_color)
 		ax[1,0].scatter(np.angle(Eq_BB[bin_0+1:bin_max+1:2]),fft_freq[bin_0+1:bin_max+1:2], s=2, color=second_color)
