@@ -86,6 +86,11 @@ def GenSCWidePre(sym_n, pre_n, start_carrier, end_carrier, start_data_carrier, e
 		if i > 0:
 			baseband[(sym_n - i)] = baseband[i].conj()
 
+	for i in range(start_carrier, end_carrier+1):
+		real = int(baseband[i].real * 32768)
+		imag = int(baseband[i].imag * 32768)
+		print(f'/* subcarrier {i} */ {real}, {imag}, \\')
+
 	# Generate the audio
 	sc_audio = ifft(baseband, sym_n)
 	# Scale the audio based on carriers in use
