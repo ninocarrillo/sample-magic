@@ -25,7 +25,7 @@ def UpdateEqPilots(symbol, eq, pilots):
 	e_avg = np.average(p_errors)
 	# Create an array of phase corrections for each bin:
 	phase_correction = np.zeros(len(eq))
-	feedback_gain = 0.175
+	feedback_gain = 0.5
 	#feedback_gain = 0
 	for i in range(len(eq)):
 		phase_correction[i] = e_avg * i * feedback_gain
@@ -523,7 +523,7 @@ def main():
 		plt.suptitle(f'Sample start: {SC_Peak_Sample}, pilot eq in green')
 		#fig.tight_layout()
 
-		SC_Offset = -1
+		SC_Offset = -cp_n//2
 		Start_i = SC_Peak_Sample + SC_Offset
 
 		Sym_BB = []
@@ -556,21 +556,15 @@ def main():
 
 			Sym_BB_Eq.append(Sym_BB[sym_i] * Eq_BB)
 			
-			if sym_i > 1:
-				p_eq = UpdateEqPilots(Sym_BB_Eq[sym_i], Eq_BB, pilots)
-				Sym_BB_Eq_x.append(Sym_BB_Eq[sym_i] * p_eq)
-			else:
-				Sym_BB_Eq_x.append(Sym_BB_Eq[sym_i])
 			
 		
 			# Plot the equalized subcarrier I/Q
 			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB_Eq[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq[sym_i][bin_0: bin_max+1].imag, color='red', s=2)
-			#ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].imag, color='green', s=2)
-			
+
 			# Plot the equalized pilots
 			for p in pilots:
 				if sym_i > 0: # no pilots in preamble
-					ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB_Eq_x[sym_i][p[0]].real],[0,Sym_BB_Eq_x[sym_i][p[0]].imag], color='blue', linewidth=1)
+					ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB_Eq[sym_i][p[0]].real],[0,Sym_BB_Eq[sym_i][p[0]].imag], color='blue', linewidth=1)
 
 
 		
