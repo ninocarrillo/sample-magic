@@ -47,6 +47,34 @@ def GenSCPre(sym_n, pre_n, start_carrier, end_carrier, seed):
 	# prepend cyclic prefix
 	sc_audio = np.concatenate([sc_audio[-pre_n:], sc_audio])
 	return sc_audio.real
+	
+def GenSCPre2(sym_n, pre_n, start_carrier, end_carrier, seed):
+	np.random.seed(seed)
+	baseband = np.zeros(sym_n, dtype='complex')
+	# set low energy constellation points for the preamble
+	coord = 1.0
+	for i in range(start_carrier, end_carrier+1):
+		if i % 2:
+			# i is odd, zero this subcarrier
+			baseband[i] = 0
+		else:
+			# i is even
+			baseband[i] = np.random.choice([-coord,coord])
+		# make output real by setting negative frequency subcarrier to conjugate (redundant if BPSK in I phase)
+		if i > 0:
+			baseband[(sym_n - i)] = baseband[i].conj()
+
+	for i in range(sym_n//2):
+		real = int(baseband[i].real * 32767)
+		imag = int(baseband[i].imag * 32767)
+		print(f'/* subcarrier {i} */ {real}, {imag}, \\')
+	# Generate the audio
+	sc_audio = ifft(baseband, sym_n)
+	# Scale the audio based on carriers in use
+	sc_audio *= sym_n / (end_carrier - start_carrier)
+	# prepend cyclic prefix
+	sc_audio = np.concatenate([sc_audio[-pre_n:], sc_audio])
+	return sc_audio.real
 
 def GenSCWidePre(sym_n, pre_n, start_carrier, end_carrier, start_data_carrier, end_data_carrier, seed):
 	np.random.seed(seed)
@@ -354,7 +382,8 @@ def main():
 	
 	# Generate Schmidl-Cox preamble
 	audio_samples = np.zeros(fft_n+cp_n)
-	audio_samples = np.concatenate([audio_samples,GenSCWidePre(fft_n, cp_n, sc_bin_0, sc_bin_max, bin_0, bin_max, 0)])
+	#audio_samples = np.concatenate([audio_samples,GenSCWidePre(fft_n, cp_n, sc_bin_0, sc_bin_max, bin_0, bin_max, 0)])
+	audio_samples = np.concatenate([audio_samples,GenSCPre2(fft_n, cp_n, sc_bin_0, sc_bin_max, 0)])
 	constellation = GenConstellation(qam_bits)
 
 	audio_samples = np.concatenate([audio_samples, GenRandomQAM(fft_n, cp_n, bin_0, bin_0+bin_n, pilots, constellation)])

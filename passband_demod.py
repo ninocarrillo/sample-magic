@@ -65,8 +65,8 @@ def CalcEqDecodeBPSK(preamble_fft, ref_fft):
 		if (i > first_occupied_bin) and (i%2==0) and (i <= last_occupied_bin):
 			# Create tap values for the data value 1 hypothesis and the 
 			# data value 0 hypothesis
-			htap_0 = ref_fft[i].conj() * preamble_fft[i]
-			htap_1 = ref_fft[i] * preamble_fft[i]
+			htap_0 = ref_fft[i] * preamble_fft[i]
+			htap_1 = -ref_fft[i] * preamble_fft[i]
 			# check the euclidian distance between the hypotheses and the last calculated tap
 			d_1 = np.power(htap_1.real - eq_taps[i-2].real, 2) + np.power(htap_1.imag - eq_taps[i-2].imag, 2)
 			d_0 = np.power(htap_0.real - eq_taps[i-2].real, 2) + np.power(htap_0.imag - eq_taps[i-2].imag, 2)
@@ -77,7 +77,7 @@ def CalcEqDecodeBPSK(preamble_fft, ref_fft):
 				eq_taps[i] = htap_0
 			j += 1
 		else:
-			eq_taps[i] = ref_fft[i].conj() * preamble_fft[i]
+			eq_taps[i] = ref_fft[i] * preamble_fft[i]
 	
 
 
@@ -211,6 +211,24 @@ def PlotPilots(start_carrier, end_carrier, pilot_count):
 	return pilot_indicies
 
 
+def GenSCPre2BB(sym_n, pre_n, start_carrier, end_carrier, seed):
+	np.random.seed(seed)
+	baseband = np.zeros(sym_n, dtype='complex')
+	# set low energy constellation points for the preamble
+	coord = 1.0
+	for i in range(start_carrier, end_carrier+1):
+		if i % 2:
+			# i is odd, zero this subcarrier
+			baseband[i] = 0
+		else:
+			# i is even
+			baseband[i] = np.random.choice([-coord,coord])
+		# make output real by setting negative frequency subcarrier to conjugate (redundant if BPSK in I phase)
+		if i > 0:
+			baseband[(sym_n - i)] = baseband[i].conj()
+
+	return baseband
+	
 def GenSCWidePreBB(sym_n, pre_n, start_carrier, end_carrier, start_data_carrier, end_data_carrier, seed):
 	np.random.seed(seed)
 	baseband = np.zeros(sym_n, dtype='complex')
@@ -506,7 +524,8 @@ def main():
 
 	for SC_Peak_Sample in Sync_List:
 		# Calculate reference baseband from known SC Preamble data
-		Ref_BB = GenSCWidePreBB(fft_n, cp_n, sc_bin_0, sc_bin_max, bin_0, bin_max, 0)
+		#Ref_BB = GenSCWidePreBB(fft_n, cp_n, sc_bin_0, sc_bin_max, bin_0, bin_max, 0)
+		Ref_BB = GenSCPre2BB(fft_n, cp_n, sc_bin_0, sc_bin_max, 0)
 		fig,ax = plt.subplots(2,5, figsize=(15,7), layout='constrained')
 		plt.suptitle(f'Sample start: {SC_Peak_Sample}, pilot eq in green')
 		#fig.tight_layout()
