@@ -81,7 +81,7 @@ def CalcEqDecodeBPSK(preamble_fft, ref_fft):
 	
 
 
-	print('BPSK Sycnword Demod')
+	print('BPSK Syncword Demod')
 	print(BPSK_data_word)
 	
 	# Measure signal and noise energies
@@ -194,20 +194,12 @@ def CalcEq(preamble_fft, ref_fft):
 	# Apply the equalizer by performing dot product to the received symbol (FFT output).
 	return eq_taps.conj(), snr
 
-def PlotPilots(start_carrier, end_carrier, pilot_count):
+def PlotPilots():
 	pilot_indicies = []
-	carrier_interval = (end_carrier-start_carrier) // (pilot_count - 1)
-	if carrier_interval % 2:
-		carrier_interval -= 1
-	this_pilot = start_carrier
-	if this_pilot % 2:
-		this_pilot += 1
-	this_coord = 1+0j
-	for i in range(pilot_count):
-		if this_pilot <= end_carrier:
-			pilot_indicies.append([int(this_pilot), this_coord])
-		this_pilot += carrier_interval
-		this_coord *= 1j
+	pilot_indicies.append([32,0j])
+	pilot_indicies.append([64,0j])
+	pilot_indicies.append([96,0j])
+	pilot_indicies.append([128,0j])
 	return pilot_indicies
 
 
@@ -366,7 +358,8 @@ def main():
 
 
 	pilot_n = 4
-	pilots = PlotPilots(bin_0, bin_max, pilot_n)
+	#pilots = PlotPilots(bin_0, bin_max, pilot_n)
+	pilots = PlotPilots()
 	#pilots = PlotPilots(int(round(1500/bin_width)), int(round(2500/bin_width)), pilot_n)
 
 	freq = np.fft.fftfreq(fft_n, 1/audio_sample_rate)
@@ -530,7 +523,7 @@ def main():
 		plt.suptitle(f'Sample start: {SC_Peak_Sample}, pilot eq in green')
 		#fig.tight_layout()
 
-		SC_Offset = -cp_n//2
+		SC_Offset = -1
 		Start_i = SC_Peak_Sample + SC_Offset
 
 		Sym_BB = []
@@ -549,12 +542,8 @@ def main():
 			ax[sg[sym_i][0],sg[sym_i][1]].grid(True)
 		
 			# Plot the unequalized subcarrier I/Q in grey
-			#ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB[sym_i][bin_0: bin_max+1].real,Sym_BB[sym_i][bin_0: bin_max+1].imag, color='grey', s=1)
+			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB[sym_i][bin_0: bin_max+1].real,Sym_BB[sym_i][bin_0: bin_max+1].imag, color='grey', s=1)
 
-			# Plot the unequalized pilots
-			#if sym_i > 0: # no pilots in preamble
-			#	for p in pilots:
-			#		ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB[sym_i][p[0]].real],[0,Sym_BB[sym_i][p[0]].imag], color='grey', linewidth=1)
 
 		# Collect equalization data from the Schmidle Cox preamble:
 		Eq_BB, SNR_lin = CalcEqDecodeBPSK(Sym_BB[0],Ref_BB)
