@@ -322,7 +322,7 @@ def main():
 	Sync_List = []
 	Sync_Arm = 0
 	Sync_Arm_Timer = 0
-	Sync_Inhibit_Period = (2 * L) + cp_n
+	Sync_Inhibit_Period = (2*L)
 	Sync_Inhibit_Timer = Sync_Inhibit_Period
 	Sync_Inhibit_Record = np.zeros(d_range)
 	Sync_Arm_Record = np.zeros(d_range)
