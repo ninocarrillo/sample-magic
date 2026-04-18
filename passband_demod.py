@@ -35,6 +35,102 @@ def UpdateEqPilots(symbol, eq, pilots):
 	#eq *= p.conj()
 	return p.conj()
 
+def CalcEqDecodeBPSK(preamble_fft, ref_fft):
+	# Calculate equalizer taps from the FFT of Schnmidl-Cox preamble symbol
+	# Preamble symbol only has data in even bins, which means we will need
+	# to interpolate equalizer taps for the odd bins. It also means we can
+	# estimate signal-to-noise ratio by averaging the energy in the even bins
+	# and the energy in the odd bins and computing a ratio.
+
+	sig_e = 0
+	noise_e = 0
+	# Initially set the equalizer to the dot product of the conjugate of the 
+	# reference symbol with the received symbol.
+	# This computes bins beyond those occupied in the waveform, because compute
+	# is cheap on my pc. Could make it more efficient in hardware by only doing
+	# the calculations on the bins that contain the waveform.
+	#eq_taps = ref_fft.conj() * preamble_fft
+	
+	# Perform BPSK demodulation.
+	# Compare Euclidian Distance of consecutive equalizer taps. The BPSK bit value that 
+	# results in the smallest Euclidian Distance is the winner for that bin.
+	occupied_bin_count = 61
+	first_occupied_bin = 26
+	last_occupied_bin = 146
+	BPSK_data_word = np.zeros(occupied_bin_count)
+	eq_taps = np.zeros(len(preamble_fft), dtype='complex')
+	j = 0
+	for i in range(len(preamble_fft)):
+		# If the index is in the occupied bin range and the index is even:
+		if (i > first_occupied_bin) and (i%2==0) and (i <= last_occupied_bin):
+			# Create tap values for the data value 1 hypothesis and the 
+			# data value 0 hypothesis
+			htap_0 = ref_fft[i].conj() * preamble_fft[i]
+			htap_1 = ref_fft[i] * preamble_fft[i]
+			# check the euclidian distance between the hypotheses and the last calculated tap
+			d_1 = np.power(htap_1.real - eq_taps[i-2].real, 2) + np.power(htap_1.imag - eq_taps[i-2].imag, 2)
+			d_0 = np.power(htap_0.real - eq_taps[i-2].real, 2) + np.power(htap_0.imag - eq_taps[i-2].imag, 2)
+			if d_1 < d_0:
+				eq_taps[i] = htap_1
+				BPSK_data_word[j] = 1
+			else:
+				eq_taps[i] = htap_0
+			j += 1
+		else:
+			eq_taps[i] = ref_fft[i].conj() * preamble_fft[i]
+	
+
+
+	print('BPSK Sycnword Demod')
+	print(BPSK_data_word)
+	
+	# Measure signal and noise energies
+	for i in range(len(eq_taps)): # step thru every equalizer tap
+		if i % 2:
+			# Odd subcarrier, only noise here
+			# Compute the noise energy and sum it
+			noise_e += np.power(np.abs(preamble_fft[i]),2)
+			# now zero this equalizer bin, prep for interpolation
+			eq_taps[i] = 0
+		else:
+			# Even subcarrier, signal here
+			sig_e += np.power(np.abs(preamble_fft[i]),2)
+			if np.abs(eq_taps[i]) > 0: # avoid divide-by-zero
+				eq_taps[i] = eq_taps[i] / np.power(np.abs(eq_taps[i]),2)
+			else: # in lieu of divide-by-zero, make this bin unity
+				eq_taps[i] = 1
+	if noise_e > 0: # avoid divide-by-zero
+		snr = sig_e / noise_e
+	else: # set some maximum snr
+		snr = 1e9
+	# Interpolate the empty equalizer bins.
+	# The interpolation filter computes the average of the two surrounding bins for
+	# every empty bin.
+	# This is a 2-dimensional linear interpolation of the I/Q data. This works because
+	# we have a very high number of carriers. In other words, the radial distance between
+	# the equalizer taps is very low, so we can ignore the magnitude error caused by this
+	# approach. If we interpolated along a curve between the two I/Q points, the angle of
+	# the interpolated point would be the same but the magnitude would be slightly higher.
+	# The magnitude error is approximately the inverse of the cosine of half the angle of
+	# separation between the two surrounding occupied equalizer taps.
+	interp_filter = np.array([0.5,1,0.5])
+	#interp_filter = np.array([1/3,1/2,1/3,1/2,1/3])
+	# Do the filter convolution
+	eq_taps = np.convolve(eq_taps, interp_filter, mode='full')
+	# Remove the filter delay:
+	# Divide filter length by two and floor the result
+	offset = len(interp_filter) // 2
+	# Discard delayed samples to re-align equalizer taps to bins
+	eq_taps = eq_taps[offset:-offset]
+	# Do another pass with a moving average filter
+	interp_filter = np.ones(3)/3
+	eq_taps = np.convolve(eq_taps, interp_filter, mode='full')
+	offset = len(interp_filter) // 2
+	eq_taps = eq_taps[offset:-offset]
+	# Return the complete equalizer, as an array of complex tap values. Also return 
+	# linear SNR. 
+	# Apply the equalizer by performing dot product to the received symbol (FFT output).
+	return eq_taps.conj(), snr
 
 def CalcEq(preamble_fft, ref_fft):
 	# Calculate equalizer taps from the FFT of Schnmidl-Cox preamble symbol
@@ -411,8 +507,6 @@ def main():
 	for SC_Peak_Sample in Sync_List:
 		# Calculate reference baseband from known SC Preamble data
 		Ref_BB = GenSCWidePreBB(fft_n, cp_n, sc_bin_0, sc_bin_max, bin_0, bin_max, 0)
-		# Calculate reference error this will be zeros)
-		Eq_BB = CalcEq(Ref_BB, Ref_BB)
 		fig,ax = plt.subplots(2,5, figsize=(15,7), layout='constrained')
 		plt.suptitle(f'Sample start: {SC_Peak_Sample}, pilot eq in green')
 		#fig.tight_layout()
@@ -444,7 +538,7 @@ def main():
 			#		ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB[sym_i][p[0]].real],[0,Sym_BB[sym_i][p[0]].imag], color='grey', linewidth=1)
 
 		# Collect equalization data from the Schmidle Cox preamble:
-		Eq_BB, SNR_lin = CalcEq(Sym_BB[0],Ref_BB)
+		Eq_BB, SNR_lin = CalcEqDecodeBPSK(Sym_BB[0],Ref_BB)
 		Avg_SNR_Lin += SNR_lin
 		SNR_dB = 10*np.log10(SNR_lin)
 
