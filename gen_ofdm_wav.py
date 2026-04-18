@@ -86,7 +86,7 @@ def GenSCWidePre(sym_n, pre_n, start_carrier, end_carrier, start_data_carrier, e
 		if i > 0:
 			baseband[(sym_n - i)] = baseband[i].conj()
 
-	for i in range(start_carrier, end_carrier+1):
+	for i in range(sym_n//2):
 		real = int(baseband[i].real * 32768)
 		imag = int(baseband[i].imag * 32768)
 		print(f'/* subcarrier {i} */ {real}, {imag}, \\')
@@ -301,11 +301,11 @@ def main():
 	repeat_n = int(sys.argv[3])
 	wav_file_name = sys.argv[4]
 	audio_sample_rate = 12000
-	cp_n = 16
+	cp_n = 8
 	fft_n = 512
-	f_0 = 600
-	f_max = 3030
-	sc_guard_n = 3 # number of extra even bins on each side of spectrum in SC preamble
+	f_0 = 650
+	f_max = 3400
+	sc_guard_n = 1 # number of extra even bins on each side of spectrum in SC preamble
 	pilot_n = 4
 	sym_rate = audio_sample_rate / (fft_n + cp_n)
 	bin_width = audio_sample_rate / fft_n

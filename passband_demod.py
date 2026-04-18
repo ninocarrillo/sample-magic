@@ -214,7 +214,7 @@ def main():
 	bin_n = (bin_max-bin_0) + 1
 
 
-	sc_guard_n = 3 # number of extra even bins on each side of spectrum in SC preamble
+	sc_guard_n = 1 # number of extra even bins on each side of spectrum in SC preamble
 	sc_bin_0 = bin_0
 	x_n = 0
 	while x_n < sc_guard_n:
@@ -417,7 +417,7 @@ def main():
 		plt.suptitle(f'Sample start: {SC_Peak_Sample}, pilot eq in green')
 		#fig.tight_layout()
 
-		SC_Offset = -cp_n // 2
+		SC_Offset = -cp_n//2
 		Start_i = SC_Peak_Sample + SC_Offset
 
 		Sym_BB = []
