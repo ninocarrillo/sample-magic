@@ -601,15 +601,15 @@ def main():
 		for p in pilots:
 			p_i.append(p[0])
 
-		for sym_i in range(1,4,1):
+		for sym_i in range(1,7,1):
 			i = 0
 			for bin_i in range(bin_0,bin_max+1,1):
-				Error_Mags[i] += np.abs((np.abs(Sym_BB_Eq_x[sym_i][bin_i]) - 1))
+				Error_Mags[i] += np.abs((np.abs(Sym_BB_Eq[sym_i][bin_i]) - 1))
 				if bin_i in p_i:
 					angle_tgt = 90
 				else:
 					angle_tgt = 45
-				ea = np.abs(np.angle(Sym_BB_Eq_x[sym_i][bin_i], deg=True) - angle_tgt)
+				ea = np.abs(np.angle(Sym_BB_Eq[sym_i][bin_i], deg=True) - angle_tgt)
 				while(ea > 45):
 					ea -= 90
 				Error_Angles[i] += abs(ea)
@@ -618,14 +618,14 @@ def main():
 	# Plot all the data symbols on one I/Q chart:
 	plt.figure()
 	for sym_i in range(1,8):
-		plt.scatter(Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].imag,s=1, color='blue')
+		plt.scatter(Sym_BB_Eq[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq[sym_i][bin_0: bin_max+1].imag,s=1, color='blue')
 	plt.show()
 
 	Avg_SNR_Lin /= len(Sync_List)
 	Avg_SNR_dB = 10*np.log10(SNR_lin)
 
 	Error_Freqs = fft_freq[bin_0:bin_max+1]
-	Error_Sym_n = 3 * len(Sync_List)
+	Error_Sym_n = 7 * len(Sync_List)
 	fig,ax = plt.subplots(1,2, layout='constrained')
 	plt.suptitle(f'Error Analysis over {Error_Sym_n} Symbols\nMeasured SNR: {Avg_SNR_dB:.1f} dB')
 	ax[0].set_title(f'Magnitude Error\nAvg {np.average(100*Error_Mags/Error_Sym_n):.1f}%')
