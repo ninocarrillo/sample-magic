@@ -35,6 +35,64 @@ def UpdateEqPilots(symbol, eq, pilots):
 	#eq *= p.conj()
 	return p.conj()
 
+def PilotEqualize(pilots, symbol):
+	pilot_n = len(pilots)
+	p_errors = np.zeros(pilot_n)
+	for i in range(pilot_n):
+		p_err = (np.angle(symbol[pilots[i][0]]) - np.angle(pilots[i][1]))
+		p_errors[i] = p_err
+		print(f'Pilot {pilots[i][0]} error: {p_err*180/np.pi:.3f} deg')
+	# calculate frequency-dependent pilot error
+	e_sum = 0
+	for i in range(pilot_n-1):
+		p_fd = (p_errors[i+1]-p_errors[i]) / (pilots[i+1][0] - pilots[i][0])
+		e_sum += p_fd
+		print(f'Interval Error: {p_fd*180/np.pi:.3f} deg/bin')
+	e_sum = e_sum / (pilot_n-1)
+
+	print(f'Avg Pilot Freq-dependent Err: {e_sum*180/np.pi:.3f} deg/bin')
+
+	# calculate non-frequency-dependent pilot error
+	c_sum = 0
+	for i in range(pilot_n):
+		p_rot = p_errors[i] - (e_sum * pilots[i][0])
+		c_sum += p_rot
+		print(f'Pilot {pilots[i][0]}: {p_rot * 180/np.pi:.3f} deg')
+	c_sum = c_sum / pilot_n
+	print(f'Avg Pilot Non-Freq-dependent Err: {c_sum*180/np.pi:.3f} deg')
+
+
+	return symbol
+
+def PilotEqualize2(pilots, symbol):
+	# assume all phase error is linear frequency dependent
+	pilot_n = len(pilots)
+	p_errors = np.zeros(pilot_n)
+	for i in range(pilot_n):
+		p_err = (np.angle(symbol[pilots[i][0]]) - np.angle(pilots[i][1]))
+		p_errors[i] = p_err
+		print(f'Pilot {pilots[i][0]} error: {p_err*180/np.pi:.3f} deg')
+	# calculate frequency-dependent pilot error
+	e_sum = 0
+	for i in range(pilot_n):
+		p_fd = p_errors[i] / pilots[i][0]
+		e_sum += p_fd
+		print(f'Interval Error: {p_fd*180/np.pi:.3f} deg/bin')
+	e_sum = e_sum / pilot_n
+
+	print(f'Avg Pilot Freq-dependent Err: {e_sum*180/np.pi:.3f} deg/bin')
+
+	# create phase equalizer based on calculated error
+	p_eq = np.zeros(len(symbol), dtype='complex')
+	for i in range(len(symbol)):
+		phase = e_sum * i
+		vector = np.cos(phase) - (1j*np.sin(phase))
+		p_eq[i] = vector
+
+
+	return symbol * p_eq
+
+
 def CalcEqDecodeBPSK(preamble_fft, ref_fft):
 	# Calculate equalizer taps from the FFT of Schnmidl-Cox preamble symbol
 	# Preamble symbol only has data in even bins, which means we will need
@@ -520,7 +578,7 @@ def main():
 		#Ref_BB = GenSCWidePreBB(fft_n, cp_n, sc_bin_0, sc_bin_max, bin_0, bin_max, 0)
 		Ref_BB = GenSCPre2BB(fft_n, cp_n, sc_bin_0, sc_bin_max, 0)
 		fig,ax = plt.subplots(2,5, figsize=(15,7), layout='constrained')
-		plt.suptitle(f'Sample start: {SC_Peak_Sample}, pilot eq in green')
+		plt.suptitle(f'Sync Sample Start: {SC_Peak_Sample}, \nUnequalized in Grey, Sync Equalized in Olive, Sync+Pilot Equalized in Red')
 		#fig.tight_layout()
 
 		SC_Offset = -cp_n//2
@@ -551,15 +609,21 @@ def main():
 		SNR_dB = 10*np.log10(SNR_lin)
 
 		for sym_i in range(8):
-			
-			# Refine the equalizer time offset based on the pilots of the previous symbol:
 
-			Sym_BB_Eq.append(Sym_BB[sym_i] * Eq_BB)
+			Equalized_Symbol = Sym_BB[sym_i] * Eq_BB
+
+			Sym_BB_Eq_x.append(Equalized_Symbol)
+
+			# Use the pilot subcarriers to refine phase equalization for data symbols
+			if sym_i > 0:
+				Equalized_Symbol = PilotEqualize2(pilots, Equalized_Symbol)
 			
+			Sym_BB_Eq.append(Equalized_Symbol)
 			
 		
 			# Plot the equalized subcarrier I/Q
 			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB_Eq[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq[sym_i][bin_0: bin_max+1].imag, color='red', s=2)
+			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].imag, color='tab:olive', s=2)
 
 			# Plot the equalized pilots
 			for p in pilots:
@@ -569,7 +633,7 @@ def main():
 
 		
 
-		ax[0,0].set_title(f'Channel Magnitude\nPreamble SNR: {SNR_dB:.1f} dB')
+		ax[0,0].set_title(f'Equalizer Magnitude\nPreamble SNR: {SNR_dB:.1f} dB')
 		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Sym_BB[0][bin_0: bin_max+1]), s=2, color='grey')
 		# plot measured EQ points in blue, interpolated in red
 		if (bin_0 % 2)==0: # bin_0 is even, first color blue
@@ -587,7 +651,7 @@ def main():
 		ax[0,0].set_ylim(-0.5,3.5)
 		ax[0,0].grid(True)
 		ax[1,0] = fig.add_subplot(2,5,6, projection='polar')
-		ax[1,0].set_title('Channel Phase')
+		ax[1,0].set_title('Equalizer Phase')
 		ax[1,0].scatter(np.angle(Eq_BB[bin_0:bin_max+1:2]),fft_freq[bin_0:bin_max+1:2], s=2, color=first_color)
 		ax[1,0].scatter(np.angle(Eq_BB[bin_0+1:bin_max+1:2]),fft_freq[bin_0+1:bin_max+1:2], s=2, color=second_color)
 		ax[1,0].legend(legend[1:])
@@ -619,6 +683,9 @@ def main():
 	plt.figure()
 	for sym_i in range(1,8):
 		plt.scatter(Sym_BB_Eq[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq[sym_i][bin_0: bin_max+1].imag,s=1, color='blue')
+		plt.title('Data Symbol Equalized I/Q')
+		plt.xlim(-1.5,1.5)
+		plt.ylim(-1.5,1.5)
 	plt.show()
 
 	Avg_SNR_Lin /= len(Sync_List)
