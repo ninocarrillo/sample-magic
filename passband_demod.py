@@ -11,59 +11,6 @@ from scipy.fft import fft, fftfreq
 from scipy.signal import firwin
 from scipy.signal import savgol_filter
 
-
-def UpdateEqPilots(symbol, eq, pilots):
-	pilot_correction = 1
-	p_errors = np.zeros(len(pilots))
-	for i in range(len(pilots)):
-		p_errors[i] = (((np.angle(symbol[pilots[i][0]]) - np.angle(pilots[i][1]*pilot_correction)) + np.pi/2) % np.pi) - (np.pi/2)
-		# Normalize phase error to frequency bin:
-		p_errors[i] = p_errors[i] / pilots[i][0]
-	print(f'Normalized pilot errors: ')
-	for e in p_errors:
-		print(f'{e*180/np.pi:.3f} deg/bin')
-	e_avg = np.average(p_errors)
-	# Create an array of phase corrections for each bin:
-	phase_correction = np.zeros(len(eq))
-	feedback_gain = 0.5
-	#feedback_gain = 0
-	for i in range(len(eq)):
-		phase_correction[i] = e_avg * i * feedback_gain
-	print(f'Avg pilot error: {e_avg*180/np.pi:.3f} deg/bin')
-	# Adjust the equalizer phase:
-	p = np.exp(1j*phase_correction)
-	#eq *= p.conj()
-	return p.conj()
-
-def PilotEqualize(pilots, symbol):
-	pilot_n = len(pilots)
-	p_errors = np.zeros(pilot_n)
-	for i in range(pilot_n):
-		p_err = (np.angle(symbol[pilots[i][0]]) - np.angle(pilots[i][1]))
-		p_errors[i] = p_err
-		print(f'Pilot {pilots[i][0]} error: {p_err*180/np.pi:.3f} deg')
-	# calculate frequency-dependent pilot error
-	e_sum = 0
-	for i in range(pilot_n-1):
-		p_fd = (p_errors[i+1]-p_errors[i]) / (pilots[i+1][0] - pilots[i][0])
-		e_sum += p_fd
-		print(f'Interval Error: {p_fd*180/np.pi:.3f} deg/bin')
-	e_sum = e_sum / (pilot_n-1)
-
-	print(f'Avg Pilot Freq-dependent Err: {e_sum*180/np.pi:.3f} deg/bin')
-
-	# calculate non-frequency-dependent pilot error
-	c_sum = 0
-	for i in range(pilot_n):
-		p_rot = p_errors[i] - (e_sum * pilots[i][0])
-		c_sum += p_rot
-		print(f'Pilot {pilots[i][0]}: {p_rot * 180/np.pi:.3f} deg')
-	c_sum = c_sum / pilot_n
-	print(f'Avg Pilot Non-Freq-dependent Err: {c_sum*180/np.pi:.3f} deg')
-
-
-	return symbol
-
 def PilotEqualize2(pilots, symbol):
 	# assume all phase error is linear frequency dependent
 	pilot_n = len(pilots)
@@ -366,15 +313,14 @@ def main():
 		print("Python version should be 3.x, exiting")
 		sys.exit(1)
 	# check correct number of parameters were passed to command line
-	if len(sys.argv) != 7:
-		print("Incorrect arg count. Usage: python3 passband_demod.py <input wav file> <cfo> <fft n> <cp n> <bin 0> <bin max>")
+	if len(sys.argv) != 6:
+		print("Incorrect arg count. Usage: python3 passband_demod.py <input wav file> <fft n> <cp n> <bin 0> <bin max>")
 		sys.exit(2)
 
-	carrier_freq = float(sys.argv[2])
-	fft_n = int(sys.argv[3])
-	cp_n = int(sys.argv[4])
-	bin_0 = int(sys.argv[5])
-	bin_max = int(sys.argv[6])
+	fft_n = int(sys.argv[2])
+	cp_n = int(sys.argv[3])
+	bin_0 = int(sys.argv[4])
+	bin_max = int(sys.argv[5])
 	bin_n = (bin_max-bin_0) + 1
 
 
@@ -416,27 +362,13 @@ def main():
 
 
 	pilot_n = 4
-	#pilots = PlotPilots(bin_0, bin_max, pilot_n)
 	pilots = PlotPilots()
-	#pilots = PlotPilots(int(round(1500/bin_width)), int(round(2500/bin_width)), pilot_n)
 
 	freq = np.fft.fftfreq(fft_n, 1/audio_sample_rate)
 
-	# Mix audio with complex baseband carrier to correct LO freq only
-	baseband_samples = np.zeros(audio_sample_count, dtype=complex)
-	carrier_phase = 0
-	print(f'Carrier Frequency Offset: {carrier_freq}')
-	for i in range(audio_sample_count):
-		time_var = 2 * np.pi * i * (-carrier_freq) / audio_sample_rate
-		baseband_samples[i] = audio_samples[i] * np.exp((time_var + carrier_phase) * 1j)
-
-	baseband_sample_rate = audio_sample_rate
-
-	baseband_index = list(range(0,len(baseband_samples)))
 
 	# Perform FFT of final audio signal
 	audio_psd = AnalyzeSpectrum(audio_samples, audio_sample_rate, 0.99)
-	baseband_psd = AnalyzeSpectrum(baseband_samples, baseband_sample_rate, 0.99)
 
 	# Attempt Schmidl-Cox conjugate correlation
 	
@@ -445,12 +377,12 @@ def main():
 	SC_Scale = 10 / L
 	
 	# Create empty list to place metric P values
-	d_range = len(baseband_samples) - fft_n
+	d_range = len(audio_samples) - fft_n
 	P1 = np.zeros(d_range, dtype='complex')
 	for d in range(d_range):
 		P1[d] = 0
 		for m in range(L):
-			P1[d] += baseband_samples[d + m].conj()*baseband_samples[d + m + L]
+			P1[d] += audio_samples[d + m]*audio_samples[d + m + L]
 			
 	# Discard imaginary part of P1
 	P1 = P1.real
@@ -468,7 +400,7 @@ def main():
 	for d in range(d_range):
 		R[d] = 0
 		for m in range(L):
-			R[d] += np.power(np.abs(baseband_samples[d + m + L]), 2)
+			R[d] += np.power(np.abs(audio_samples[d + m + L]), 2)
 	# Normalize energy
 	R *= SC_Scale
 	
@@ -513,43 +445,28 @@ def main():
 	print(Sync_List)
 
 
-	fig, ax = plt.subplots(2,3, figsize=(12,8))
-	fig.tight_layout()
-	plt.subplot(234)
-	plt.plot(baseband_samples.real, baseband_samples.imag, '.', ms=2)
-	plt.title('Baseband Samples')
-	plt.xlabel('in-phase')
-	plt.ylabel('quadrature')
-	plt.xlim(-0.5,0.5)
-	plt.ylim(-0.5,0.5)
-	plt.grid(True)
-	plt.subplot(235)
-	plt.plot(baseband_psd[0], baseband_psd[1], '.', ms=2)
-	plt.xlim(-5000, 5000)
-	plt.ylim(-60,10)
-	plt.ylabel("dBFS")
-	plt.xlabel("Frequency, Hz")
-	plt.title("Baseband Spectrum")
-	plt.grid(True)
-	plt.subplot(231)
+	fig, ax = plt.subplots(1,4, figsize=(12,3.5), layout='constrained')
+	plt.suptitle('Time-Domain Analysis')
+	plt.subplot(141)
 	plt.plot(audio_samples, linewidth=1)
 	plt.title("Audio Samples")
 	plt.ylim(-1.5,1.5)
-	plt.subplot(232)
+	plt.subplot(142)
 	plt.plot(audio_psd[0], audio_psd[1], '.', ms=2)
 	plt.xlim(0, 4000)
-	plt.ylim(-100,10)
+	plt.ylim(-60,10)
 	plt.ylabel("dBFS")
 	plt.xlabel("Frequency, Hz")
 	plt.title("Audio spectrum")
 	plt.grid(True)
 
-	plt.subplot(236)
-	plt.title('Derivative of Moving Average of P1')
+	plt.subplot(144)
+	plt.title("P1' MA")
 	plt.plot(P1_Derivative)
 	plt.grid('true')
 
-	plt.subplot(233)
+	plt.subplot(143)
+	plt.title('Schmidl-Cox')
 	plt.plot(P1.real)
 	plt.plot(P1_MA.real)
 	plt.plot(R)
@@ -575,26 +492,26 @@ def main():
 
 	for SC_Peak_Sample in Sync_List:
 		# Calculate reference baseband from known SC Preamble data
-		#Ref_BB = GenSCWidePreBB(fft_n, cp_n, sc_bin_0, sc_bin_max, bin_0, bin_max, 0)
 		Ref_BB = GenSCPre2BB(fft_n, cp_n, sc_bin_0, sc_bin_max, 0)
 		fig,ax = plt.subplots(2,5, figsize=(15,7), layout='constrained')
-		plt.suptitle(f'Sync Sample Start: {SC_Peak_Sample}, \nUnequalized in Grey, Sync Equalized in Olive, Sync+Pilot Equalized in Red')
-		#fig.tight_layout()
+		plt.suptitle(f'Frequency Domain Analysis\nSync Sample Start: {SC_Peak_Sample}\nUnequalized in Grey, Sync Equalized in Olive, Sync+Pilot Equalized in Blue')
 
 		SC_Offset = -cp_n//2
 		Start_i = SC_Peak_Sample + SC_Offset
 
 		Sym_BB = []
-		Sym_BB_Eq = []
-		Sym_BB_Eq_x = []
+		SyncPilot_Equalized_BB = []
+		Sync_Equalized_BB = []
 		for sym_i in range(8):
 			try:
-				Sym_BB.append(np.fft.fft(baseband_samples[Start_i:Start_i + fft_n])*bin_n/fft_n)
+				Sym_BB.append(np.fft.fft(audio_samples[Start_i:Start_i + fft_n])*bin_n/fft_n)
 			except:
 				Sym_BB.append(np.zeros(fft_n, dtype='complex'))
 			Start_i += (fft_n + cp_n)
-		
-			ax[sg[sym_i][0],sg[sym_i][1]].set_title(f'Symbol {sym_i}')
+			if sym_i == 0:
+				ax[sg[sym_i][0],sg[sym_i][1]].set_title(f'Symbol 0 (Sync)')
+			else:
+				ax[sg[sym_i][0],sg[sym_i][1]].set_title(f'Symbol {sym_i}')
 			ax[sg[sym_i][0],sg[sym_i][1]].set_xlim(-1.5,1.5)
 			ax[sg[sym_i][0],sg[sym_i][1]].set_ylim(-1.5,1.5)
 			ax[sg[sym_i][0],sg[sym_i][1]].grid(True)
@@ -612,23 +529,23 @@ def main():
 
 			Equalized_Symbol = Sym_BB[sym_i] * Eq_BB
 
-			Sym_BB_Eq_x.append(Equalized_Symbol)
+			Sync_Equalized_BB.append(Equalized_Symbol)
 
 			# Use the pilot subcarriers to refine phase equalization for data symbols
 			if sym_i > 0:
 				Equalized_Symbol = PilotEqualize2(pilots, Equalized_Symbol)
 			
-			Sym_BB_Eq.append(Equalized_Symbol)
+			SyncPilot_Equalized_BB.append(Equalized_Symbol)
 			
 		
 			# Plot the equalized subcarrier I/Q
-			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB_Eq[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq[sym_i][bin_0: bin_max+1].imag, color='red', s=2)
-			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq_x[sym_i][bin_0: bin_max+1].imag, color='tab:olive', s=2)
+			ax[sg[sym_i][0],sg[sym_i][1]].scatter(Sync_Equalized_BB[sym_i][bin_0: bin_max+1].real,Sync_Equalized_BB[sym_i][bin_0: bin_max+1].imag, color='tab:olive', s=2)
+			ax[sg[sym_i][0],sg[sym_i][1]].scatter(SyncPilot_Equalized_BB[sym_i][bin_0: bin_max+1].real,SyncPilot_Equalized_BB[sym_i][bin_0: bin_max+1].imag, color='blue', s=2)
 
 			# Plot the equalized pilots
 			for p in pilots:
 				if sym_i > 0: # no pilots in preamble
-					ax[sg[sym_i][0],sg[sym_i][1]].plot([0,Sym_BB_Eq[sym_i][p[0]].real],[0,Sym_BB_Eq[sym_i][p[0]].imag], color='blue', linewidth=1)
+					ax[sg[sym_i][0],sg[sym_i][1]].plot([0,SyncPilot_Equalized_BB[sym_i][p[0]].real],[0,SyncPilot_Equalized_BB[sym_i][p[0]].imag], color='blue', linewidth=1)
 
 
 		
@@ -668,12 +585,12 @@ def main():
 		for sym_i in range(1,7,1):
 			i = 0
 			for bin_i in range(bin_0,bin_max+1,1):
-				Error_Mags[i] += np.abs((np.abs(Sym_BB_Eq[sym_i][bin_i]) - 1))
+				Error_Mags[i] += np.abs((np.abs(SyncPilot_Equalized_BB[sym_i][bin_i]) - 1))
 				if bin_i in p_i:
 					angle_tgt = 90
 				else:
 					angle_tgt = 45
-				ea = np.abs(np.angle(Sym_BB_Eq[sym_i][bin_i], deg=True) - angle_tgt)
+				ea = np.abs(np.angle(SyncPilot_Equalized_BB[sym_i][bin_i], deg=True) - angle_tgt)
 				while(ea > 45):
 					ea -= 90
 				Error_Angles[i] += abs(ea)
@@ -682,8 +599,9 @@ def main():
 	# Plot all the data symbols on one I/Q chart:
 	plt.figure()
 	for sym_i in range(1,8):
-		plt.scatter(Sym_BB_Eq[sym_i][bin_0: bin_max+1].real,Sym_BB_Eq[sym_i][bin_0: bin_max+1].imag,s=1, color='blue')
-		plt.title('Data Symbol Equalized I/Q')
+		plt.scatter(SyncPilot_Equalized_BB[sym_i][bin_0: bin_max+1].real,SyncPilot_Equalized_BB[sym_i][bin_0: bin_max+1].imag,s=1, color='blue')
+		plt.title('Accumulated Data Symbol Equalized I/Q')
+		plt.grid(True)
 		plt.xlim(-1.5,1.5)
 		plt.ylim(-1.5,1.5)
 	plt.show()
