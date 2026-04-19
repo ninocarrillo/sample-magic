@@ -88,6 +88,13 @@ def CalcEqDecodeBPSK(preamble_fft, ref_fft):
 
 	print('BPSK Syncword Demod')
 	print(BPSK_data_word)
+	sync_field_0 = 0;
+	data_word = 32768
+	for i in range(16):
+		if BPSK_data_word[i] == 1:
+			sync_field_0 += data_word
+		data_word >>= 1
+	print(f'Sync Field 0, {sync_field_0}')
 	
 	# Measure signal and noise energies
 	for i in range(len(eq_taps)): # step thru every equalizer tap
