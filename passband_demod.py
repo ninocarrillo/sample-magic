@@ -9,7 +9,198 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.fft import fft, fftfreq
 from scipy.signal import firwin
-from scipy.signal import savgol_filter
+import crc
+
+
+def print_ax25_header(frame, delimiter):
+	count = len(frame)
+	index = 0
+	if (count > 15):
+		valid_header = 1
+		address_extension_bit = 0
+		index = 0
+		subfield_character_index = 0
+		subfield_index = 0
+		# Print address information
+		while address_extension_bit == 0:
+			working_character = int(frame[index])
+			if (working_character & 0b1) == 1:
+				address_extension_bit = 1
+			working_character = working_character >> 1
+			subfield_character_index = subfield_character_index + 1
+			if (subfield_character_index == 1):
+				if (subfield_index == 0):
+					print("To:", end='')
+				elif (subfield_index == 1):
+					print(delimiter, end='')
+					print("From:", end='')
+				else:
+					print(delimiter, end='')
+					print("Via:", end='')
+			if subfield_character_index < 7:
+				# This is a callsign character
+				if (working_character != 0) and (working_character != 0x20):
+					print(chr(working_character), end='')
+			elif subfield_character_index == 7:
+				# This is the SSID characters
+				# Get bits
+				print('-', end='')
+				print(working_character & 0b1111, end='')
+				if (working_character & 0b10000000):
+					# C or H bit is set
+					print('*', end=' ')
+				# This field is complete
+				subfield_character_index = 0
+				subfield_index = subfield_index + 1
+			index = index + 1
+			if index > count:
+				address_extension_bit = 1
+		# Control and PID fields
+		working_character = frame[index]
+		print(delimiter, end='')
+		print("Control: ", end='')
+		print(f'{hex(working_character)} ', end='')
+		poll_final_bit = (working_character & 0x10) >> 4
+		# determine what type of frame this is
+		if (working_character & 1) == 1:
+			# either a Supervisory or Unnumbered frame
+			frame_type = working_character & 3
+		else:
+			# Information frame
+			frame_type = 0
+			ax25_ns = (working_character >> 1) & 7
+			ax25_nr = (working_character >> 5) & 7
+
+		if frame_type == 1:
+			# Supervisory frame
+			ax25_nr = (working_character >> 5) & 7
+
+		if frame_type == 3:
+			# Unnumbered frame, determine what type
+			ax25_u_control_field_type = working_character & 0xEF
+		else:
+			ax25_u_control_field_type = 0
+
+		if (ax25_u_control_field_type == 0x6F):
+			print("SABME", end='')
+		elif (ax25_u_control_field_type == 0x2F):
+			print("SABM", end='')
+		elif (ax25_u_control_field_type == 0x43):
+			print("DISC", end='')
+		elif (ax25_u_control_field_type == 0x0F):
+			print("DM", end='')
+		elif (ax25_u_control_field_type == 0x63):
+			print("UA", end='')
+		elif (ax25_u_control_field_type == 0x87):
+			print("FRMR", end='')
+		elif (ax25_u_control_field_type == 0x03):
+			print("UI", end='')
+		elif (ax25_u_control_field_type == 0xAF):
+			print("XID", end='')
+		elif (ax25_u_control_field_type == 0xE3):
+			print("TEST", end='')
+
+		if (frame_type == 0) or (ax25_u_control_field_type == 3):
+			# This is an Information frame, or an Unnumbered Information frame, so
+			# there is a PID byte.
+			index = index + 1
+			working_character = frame[index]
+			print(delimiter, end='')
+			print("PID: ", end='')
+			print(f'{hex(working_character)} ', end='')
+			if (working_character == 1):
+				print("ISO 8208", end='')
+			if (working_character == 6):
+				print("Compressed TCP/IP", end='')
+			if (working_character == 7):
+				print("Uncompressed TCP/IP", end='')
+			if (working_character == 8):
+				print("Segmentation Fragment", end='')
+			if (working_character == 0xC3):
+				print("TEXNET", end='')
+			if (working_character == 0xC4):
+				print("Link Quality Protocol", end='')
+			if (working_character == 0xCA):
+				print("Appletalk", end='')
+			if (working_character == 0xCC):
+				print("ARPA Internet Protocol", end='')
+			if (working_character == 0xCD):
+				print("ARPA Address Resolution", end='')
+			if (working_character == 0xCF):
+				print("TheNET (NET/ROM)", end='')
+			if (working_character == 0xF0):
+				print("No Layer 3", end='')
+			if (working_character == 0xFF):
+				print("Escape", end='')
+
+		index = index + 1
+
+		# return the index of the start of payload data
+		print(" ")
+	return index
+
+def print_frame(frame, crc_val):
+	print("\r\n-- ", end='')
+	frame_len = len(frame)
+	print(f'crc: {crc_val}', end='')
+	print(" byte count: ", frame_len, end='\r\n')
+	frame_lines = (frame_len // 16)
+	if (frame_len % 16) > 0:
+		frame_lines += 1
+	last_line_len = frame_len - (frame_lines * 16)
+	frame_index = 0
+	for line in range(0, frame_lines):
+		for i in range(0, 16):
+			if frame_index < frame_len:
+				if frame[frame_index] < 0x20:
+					print('.', end='')
+				elif frame[frame_index] > 0x7E:
+					print('.', end='')
+				else:
+					print(chr(frame[frame_index]), end='')
+				frame_index += 1
+			else:
+				print(' ', end='')
+		print(' | ', end='')
+		frame_index = line * 16
+		for i in range(0, 16):
+			if frame_index < frame_len:
+				print("%2X" % frame[frame_index], end=' ')
+				frame_index += 1
+		print('\r\n', end='', flush=True)
+
+def DecodeQPSK(symbol):
+	# Occupied subcarriers: 26 thru 145 inclusive
+	# Pilots on 32, 64, 96, 128
+	chunk = []
+	working_byte = 0
+	bit_index = 0
+	for i in range(26,146):
+		subcarrier = symbol[i]
+		if i != 32:
+			if i != 64:
+				if i != 96:
+					if i != 128:
+						working_byte <<= 2
+						if subcarrier.real < 0:
+							if subcarrier.imag < 0:
+								working_byte += 1
+							else:
+								working_byte += 2
+						else:
+							if subcarrier.imag < 0:
+								working_byte += 3
+						bit_index += 2;
+						if bit_index >= 8:
+							bit_index = 0
+							chunk.append(working_byte)
+							working_byte = 0
+
+	print(f'Returning {len(chunk)} bytes with {bit_index} bits left in register.')
+	return chunk
+
+
+
 
 def PilotEqualize2(pilots, symbol):
 	# assume all phase error is linear frequency dependent
@@ -18,16 +209,16 @@ def PilotEqualize2(pilots, symbol):
 	for i in range(pilot_n):
 		p_err = (np.angle(symbol[pilots[i][0]]) - np.angle(pilots[i][1]))
 		p_errors[i] = p_err
-		print(f'Pilot {pilots[i][0]} error: {p_err*180/np.pi:.3f} deg')
+		#print(f'Pilot {pilots[i][0]} error: {p_err*180/np.pi:.3f} deg')
 	# calculate frequency-dependent pilot error
 	e_sum = 0
 	for i in range(pilot_n):
 		p_fd = p_errors[i] / pilots[i][0]
 		e_sum += p_fd
-		print(f'Interval Error: {p_fd*180/np.pi:.3f} deg/bin')
+		#print(f'Interval Error: {p_fd*180/np.pi:.3f} deg/bin')
 	e_sum = e_sum / pilot_n
 
-	print(f'Avg Pilot Freq-dependent Err: {e_sum*180/np.pi:.3f} deg/bin')
+	#print(f'Avg Pilot Freq-dependent Err: {e_sum*180/np.pi:.3f} deg/bin')
 
 	# create phase equalizer based on calculated error
 	p_eq = np.zeros(len(symbol), dtype='complex')
@@ -86,15 +277,15 @@ def CalcEqDecodeBPSK(preamble_fft, ref_fft):
 	
 
 
-	print('BPSK Syncword Demod')
-	print(BPSK_data_word)
+	#print('BPSK Syncword Demod')
+	#print(BPSK_data_word)
 	sync_field_0 = 0;
 	data_word = 32768
 	for i in range(16):
 		if BPSK_data_word[i] == 1:
 			sync_field_0 += data_word
 		data_word >>= 1
-	print(f'Sync Field 0, {sync_field_0}')
+	#print(f'Sync Field 0, {sync_field_0}')
 	
 	# Measure signal and noise energies
 	for i in range(len(eq_taps)): # step thru every equalizer tap
@@ -142,7 +333,7 @@ def CalcEqDecodeBPSK(preamble_fft, ref_fft):
 	# Return the complete equalizer, as an array of complex tap values. Also return 
 	# linear SNR. 
 	# Apply the equalizer by performing dot product to the received symbol (FFT output).
-	return eq_taps.conj(), snr
+	return eq_taps.conj(), snr, sync_field_0
 
 def CalcEq(preamble_fft, ref_fft):
 	# Calculate equalizer taps from the FFT of Schnmidl-Cox preamble symbol
@@ -488,7 +679,6 @@ def main():
 	fft_freq = fft_freq[:fft_n//2]
 
 
-	# Start sample for FFT should be in the center of the cyclic prefix
 	
 	sg = [[0,1],[0,2],[0,3],[0,4],[1,1],[1,2],[1,3],[1,4]]
 
@@ -496,14 +686,56 @@ def main():
 	Error_Mags = np.zeros(bin_n)
 	Error_Angles = np.zeros(bin_n)
 	Avg_SNR_Lin = 0
+	# Start sample for FFT should be in the center of the cyclic prefix
+	SC_Offset = -cp_n//2
+
+	Ref_BB = GenSCPre2BB(fft_n, cp_n, sc_bin_0, sc_bin_max, 0)
+
+	for SC_Peak_Sample in Sync_List:
+		# Try to decode some data. Search for a syncword with modulation
+		Start_i = SC_Peak_Sample + SC_Offset
+		# Do FFT for the Preamble symbol
+		Preamble_Baseband = np.fft.fft(audio_samples[Start_i:Start_i + fft_n])
+		# Collect equalization data from the Schmidle Cox preamble:
+		Eq_BB, SNR_lin, Field_0 = CalcEqDecodeBPSK(Preamble_Baseband,Ref_BB)
+		if Field_0 > 0:
+			# Indicates more data to collect.
+			print(f'Preamble detected at sample {SC_Peak_Sample}. Field 0: {Field_0} bytes.')
+			Data_Symbol_Count = Field_0 // 29
+			if (Data_Symbol_Count * 29 < Field_0):
+				Data_Symbol_Count += 1
+			print(f'Data Symbol Count: {Data_Symbol_Count}')
+			Decoded_Packet = []
+			for Data_Symbol_Index in range(Data_Symbol_Count):
+				Start_i += (fft_n + cp_n)
+				Symbol_Baseband = np.fft.fft(audio_samples[Start_i:Start_i + fft_n])
+				# Apply sync-derived channel equalizer
+				# to correct channel magnitude and phase
+				Symbol_Baseband *= Eq_BB
+				# Apply pilot phase equalizer
+				# to correct progressive sample time offset since sync symbol
+				Symbol_Baseband = PilotEqualize2(pilots, Symbol_Baseband)
+				Decoded_Packet.extend(DecodeQPSK(Symbol_Baseband))
+			Decoded_Packet = Decoded_Packet[:Field_0]
+			FCS = crc.CalcCRC16(Decoded_Packet)
+			print_frame(Decoded_Packet, FCS)
+			header_length = print_ax25_header(Decoded_Packet, ',')
+			frame_string = ""
+			for byte in Decoded_Packet[header_length:]:
+				if (byte < 0x7F) and (byte > 0x1F):
+					frame_string += chr(int(byte))
+				else:
+					frame_string += f'<{hex(int(byte))}>'
+			print(frame_string)
+
+
 
 	for SC_Peak_Sample in Sync_List:
 		# Calculate reference baseband from known SC Preamble data
-		Ref_BB = GenSCPre2BB(fft_n, cp_n, sc_bin_0, sc_bin_max, 0)
 		fig,ax = plt.subplots(2,5, figsize=(15,7), layout='constrained')
 		plt.suptitle(f'Frequency Domain Analysis\nSync Sample Start: {SC_Peak_Sample}\nUnequalized in Grey, Sync Equalized in Olive, Sync+Pilot Equalized in Blue')
 
-		SC_Offset = -cp_n//2
+
 		Start_i = SC_Peak_Sample + SC_Offset
 
 		Sym_BB = []
@@ -511,7 +743,7 @@ def main():
 		Sync_Equalized_BB = []
 		for sym_i in range(8):
 			try:
-				Sym_BB.append(np.fft.fft(audio_samples[Start_i:Start_i + fft_n])*bin_n/fft_n)
+				Sym_BB.append(np.fft.fft(audio_samples[Start_i:Start_i + fft_n]))
 			except:
 				Sym_BB.append(np.zeros(fft_n, dtype='complex'))
 			Start_i += (fft_n + cp_n)
@@ -528,7 +760,8 @@ def main():
 
 
 		# Collect equalization data from the Schmidle Cox preamble:
-		Eq_BB, SNR_lin = CalcEqDecodeBPSK(Sym_BB[0],Ref_BB)
+		Eq_BB, SNR_lin, Field_0 = CalcEqDecodeBPSK(Sym_BB[0],Ref_BB)
+
 		Avg_SNR_Lin += SNR_lin
 		SNR_dB = 10*np.log10(SNR_lin)
 
