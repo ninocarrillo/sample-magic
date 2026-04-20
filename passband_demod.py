@@ -196,7 +196,7 @@ def DecodeQPSK(symbol):
 							chunk.append(working_byte)
 							working_byte = 0
 
-	print(f'Returning {len(chunk)} bytes with {bit_index} bits left in register.')
+	#print(f'Returning {len(chunk)} bytes with {bit_index} bits left in register.')
 	return chunk
 
 
@@ -324,11 +324,6 @@ def CalcEqDecodeBPSK(preamble_fft, ref_fft):
 	# Divide filter length by two and floor the result
 	offset = len(interp_filter) // 2
 	# Discard delayed samples to re-align equalizer taps to bins
-	eq_taps = eq_taps[offset:-offset]
-	# Do another pass with a moving average filter
-	interp_filter = np.ones(3)/3
-	eq_taps = np.convolve(eq_taps, interp_filter, mode='full')
-	offset = len(interp_filter) // 2
 	eq_taps = eq_taps[offset:-offset]
 	# Return the complete equalizer, as an array of complex tap values. Also return 
 	# linear SNR. 
@@ -511,31 +506,15 @@ def main():
 		print("Python version should be 3.x, exiting")
 		sys.exit(1)
 	# check correct number of parameters were passed to command line
-	if len(sys.argv) != 6:
-		print("Incorrect arg count. Usage: python3 passband_demod.py <input wav file> <fft n> <cp n> <bin 0> <bin max>")
+	if len(sys.argv) != 2:
+		print("Incorrect arg count. Usage: python3 passband_demod.py <input wav file> ")
 		sys.exit(2)
 
-	fft_n = int(sys.argv[2])
-	cp_n = int(sys.argv[3])
-	bin_0 = int(sys.argv[4])
-	bin_max = int(sys.argv[5])
+	fft_n = 512
+	cp_n = 8
+	bin_0 = 26
+	bin_max = 146
 	bin_n = (bin_max-bin_0) + 1
-
-
-	sc_guard_n = 1 # number of extra even bins on each side of spectrum in SC preamble
-	sc_bin_0 = bin_0
-	x_n = 0
-	while x_n < sc_guard_n:
-		sc_bin_0 -= 1
-		if sc_bin_0 % 2 == 0:
-			x_n += 1
-	sc_bin_max = bin_max
-	x_n = 0
-	while x_n < sc_guard_n:
-		sc_bin_max += 1
-		if sc_bin_max % 2 == 0:
-			x_n += 1
-	sc_bin_n = (sc_bin_max - sc_bin_0) + 1
 
 
 	try:
@@ -689,7 +668,7 @@ def main():
 	# Start sample for FFT should be in the center of the cyclic prefix
 	SC_Offset = -cp_n//2
 
-	Ref_BB = GenSCPre2BB(fft_n, cp_n, sc_bin_0, sc_bin_max, 0)
+	Ref_BB = GenSCPre2BB(fft_n, cp_n, bin_0, bin_max, 0)
 
 	for SC_Peak_Sample in Sync_List:
 		# Try to decode some data. Search for a syncword with modulation
@@ -711,7 +690,10 @@ def main():
 				Symbol_Baseband = np.fft.fft(audio_samples[Start_i:Start_i + fft_n])
 				# Apply sync-derived channel equalizer
 				# to correct channel magnitude and phase
-				Symbol_Baseband *= Eq_BB
+				try:
+					Symbol_Baseband *= Eq_BB
+				except:
+					print("Equalizer problem")
 				# Apply pilot phase equalizer
 				# to correct progressive sample time offset since sync symbol
 				Symbol_Baseband = PilotEqualize2(pilots, Symbol_Baseband)
@@ -791,7 +773,7 @@ def main():
 		
 
 		ax[0,0].set_title(f'Equalizer Magnitude\nPreamble SNR: {SNR_dB:.1f} dB')
-		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],np.abs(Sym_BB[0][bin_0: bin_max+1]), s=2, color='grey')
+		ax[0,0].scatter(fft_freq[bin_0: bin_max+1],10*np.log10(np.abs(Sym_BB[0][bin_0: bin_max+1])), s=2, color='grey')
 		# plot measured EQ points in blue, interpolated in red
 		if (bin_0 % 2)==0: # bin_0 is even, first color blue
 			first_color = 'blue'
@@ -802,10 +784,9 @@ def main():
 			second_color = 'blue'
 			legend = ['preamble', 'interp eq', 'meas eq']
 			
-		ax[0,0].scatter(fft_freq[bin_0: bin_max+1:2],np.abs(Eq_BB[bin_0: bin_max+1:2]), s=2, color=first_color)
-		ax[0,0].scatter(fft_freq[bin_0+1: bin_max+1:2],np.abs(Eq_BB[bin_0+1: bin_max+1:2]), s=2, color=second_color)
+		ax[0,0].scatter(fft_freq[bin_0: bin_max+1:2],10*np.log10(np.abs(Eq_BB[bin_0: bin_max+1:2])), s=2, color=first_color)
+		ax[0,0].scatter(fft_freq[bin_0+1: bin_max+1:2],10*np.log10(np.abs(Eq_BB[bin_0+1: bin_max+1:2])), s=2, color=second_color)
 		ax[0,0].legend(legend)
-		ax[0,0].set_ylim(-0.5,3.5)
 		ax[0,0].grid(True)
 		ax[1,0] = fig.add_subplot(2,5,6, projection='polar')
 		ax[1,0].set_title('Equalizer Phase')
@@ -824,7 +805,7 @@ def main():
 
 		for sym_i in range(1,7,1):
 			i = 0
-			for bin_i in range(bin_0,bin_max+1,1):
+			for bin_i in range(bin_0,bin_max,1):
 				Error_Mags[i] += np.abs((np.abs(SyncPilot_Equalized_BB[sym_i][bin_i]) - 1))
 				if bin_i in p_i:
 					angle_tgt = 90
