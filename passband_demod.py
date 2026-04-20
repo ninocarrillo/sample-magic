@@ -285,8 +285,10 @@ def CalcEqDecodeBPSK(preamble_fft, ref_fft):
 		if BPSK_data_word[i] == 1:
 			sync_field_0 += data_word
 		data_word >>= 1
-	#print(f'Sync Field 0, {sync_field_0}')
-	
+	print(f'Sync Field 0, {sync_field_0}')
+	if sync_field_0 > 1000:
+		sync_field_0 = 50
+		print(f'Forced short sync field')
 	# Measure signal and noise energies
 	for i in range(len(eq_taps)): # step thru every equalizer tap
 		if i % 2:
@@ -666,7 +668,7 @@ def main():
 	Error_Angles = np.zeros(bin_n)
 	Avg_SNR_Lin = 0
 	# Start sample for FFT should be in the center of the cyclic prefix
-	SC_Offset = -cp_n//2
+	SC_Offset = 0
 
 	Ref_BB = GenSCPre2BB(fft_n, cp_n, bin_0, bin_max, 0)
 
@@ -690,10 +692,7 @@ def main():
 				Symbol_Baseband = np.fft.fft(audio_samples[Start_i:Start_i + fft_n])
 				# Apply sync-derived channel equalizer
 				# to correct channel magnitude and phase
-				try:
-					Symbol_Baseband *= Eq_BB
-				except:
-					print("Equalizer problem")
+				Symbol_Baseband *= Eq_BB
 				# Apply pilot phase equalizer
 				# to correct progressive sample time offset since sync symbol
 				Symbol_Baseband = PilotEqualize2(pilots, Symbol_Baseband)
