@@ -143,7 +143,7 @@ def print_frame(frame, crc_val):
 	print("\r\n-- ", end='')
 	frame_len = len(frame)
 	print(f'crc: {crc_val}', end='')
-	print(" byte count: ", frame_len, end='\r\n')
+	print(" byte count: ", frame_len, end='\n')
 	frame_lines = (frame_len // 16)
 	if (frame_len % 16) > 0:
 		frame_lines += 1
@@ -169,7 +169,7 @@ def print_frame(frame, crc_val):
 				frame_index += 1
 		print('\r\n', end='', flush=True)
 
-def DecodeQPSK(symbol):
+def DecodeQPSK(symbol, pilots):
 	# Occupied subcarriers: 26 thru 145 inclusive
 	# Pilots on 32, 64, 96, 128
 	chunk = []
@@ -177,10 +177,10 @@ def DecodeQPSK(symbol):
 	bit_index = 0
 	for i in range(26,146):
 		subcarrier = symbol[i]
-		if i != 32:
-			if i != 64:
-				if i != 96:
-					if i != 128:
+		if i != pilots[0][0]:
+			if i != pilots[1][0]:
+				if i != pilots[2][0]:
+					if i != pilots[3][0]:
 						working_byte <<= 2
 						if subcarrier.real < 0:
 							if subcarrier.imag < 0:
@@ -401,9 +401,9 @@ def CalcEq(preamble_fft, ref_fft):
 
 def PlotPilots():
 	pilot_indicies = []
-	pilot_indicies.append([32,0j])
 	pilot_indicies.append([64,0j])
-	pilot_indicies.append([96,0j])
+	pilot_indicies.append([85,0j])
+	pilot_indicies.append([107,0j])
 	pilot_indicies.append([128,0j])
 	return pilot_indicies
 
@@ -701,7 +701,7 @@ def main():
 				# Apply pilot phase equalizer
 				# to correct progressive sample time offset since sync symbol
 				Symbol_Baseband = PilotEqualize2(pilots, Symbol_Baseband)
-				Decoded_Packet.extend(DecodeQPSK(Symbol_Baseband))
+				Decoded_Packet.extend(DecodeQPSK(Symbol_Baseband,pilots))
 			Decoded_Packet = Decoded_Packet[:Field_0]
 			FCS = crc.CalcCRC16(Decoded_Packet)
 			print_frame(Decoded_Packet, FCS)
