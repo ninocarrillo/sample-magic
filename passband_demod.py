@@ -212,13 +212,13 @@ def PilotEqualize2(pilots, symbol):
 		#print(f'Pilot {pilots[i][0]} error: {p_err*180/np.pi:.3f} deg')
 	# calculate frequency-dependent pilot error
 	e_sum = 0
-	for i in range(pilot_n):
+	for i in range(1,pilot_n):
 		p_fd = p_errors[i] / pilots[i][0]
 		e_sum += p_fd
-		#print(f'Interval Error: {p_fd*180/np.pi:.3f} deg/bin')
-	e_sum = e_sum / pilot_n
+		print(f'Pilot {pilots[i][0]} Error: {p_fd*180/np.pi:.3f} deg/bin')
+	e_sum = e_sum / (pilot_n-1)
 
-	#print(f'Avg Pilot Freq-dependent Err: {e_sum*180/np.pi:.3f} deg/bin')
+	print(f'Avg Pilot Freq-dependent Err: {e_sum*180/np.pi:.3f} deg/bin')
 
 	# create phase equalizer based on calculated error
 	p_eq = np.zeros(len(symbol), dtype='complex')
@@ -327,6 +327,11 @@ def CalcEqDecodeBPSK(preamble_fft, ref_fft):
 	offset = len(interp_filter) // 2
 	# Discard delayed samples to re-align equalizer taps to bins
 	eq_taps = eq_taps[offset:-offset]
+	# Do another pass with a moving average filter
+	interp_filter = np.ones(3)/3
+	#eq_taps = np.convolve(eq_taps, interp_filter, mode='full')
+	#offset = len(interp_filter) // 2
+	#eq_taps = eq_taps[offset:-offset]
 	# Return the complete equalizer, as an array of complex tap values. Also return 
 	# linear SNR. 
 	# Apply the equalizer by performing dot product to the received symbol (FFT output).
@@ -668,7 +673,7 @@ def main():
 	Error_Angles = np.zeros(bin_n)
 	Avg_SNR_Lin = 0
 	# Start sample for FFT should be in the center of the cyclic prefix
-	SC_Offset = 0
+	SC_Offset = -cp_n//2
 
 	Ref_BB = GenSCPre2BB(fft_n, cp_n, bin_0, bin_max, 0)
 
