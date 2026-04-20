@@ -215,10 +215,10 @@ def PilotEqualize2(pilots, symbol):
 	for i in range(1,pilot_n):
 		p_fd = p_errors[i] / pilots[i][0]
 		e_sum += p_fd
-		print(f'Pilot {pilots[i][0]} Error: {p_fd*180/np.pi:.3f} deg/bin')
+		#print(f'Pilot {pilots[i][0]} Error: {p_fd*180/np.pi:.3f} deg/bin')
 	e_sum = e_sum / (pilot_n-1)
 
-	print(f'Avg Pilot Freq-dependent Err: {e_sum*180/np.pi:.3f} deg/bin')
+	#print(f'Avg Pilot Freq-dependent Err: {e_sum*180/np.pi:.3f} deg/bin')
 
 	# create phase equalizer based on calculated error
 	p_eq = np.zeros(len(symbol), dtype='complex')
@@ -686,11 +686,9 @@ def main():
 		Eq_BB, SNR_lin, Field_0 = CalcEqDecodeBPSK(Preamble_Baseband,Ref_BB)
 		if Field_0 > 0:
 			# Indicates more data to collect.
-			print(f'Preamble detected at sample {SC_Peak_Sample}. Field 0: {Field_0} bytes.')
 			Data_Symbol_Count = Field_0 // 29
 			if (Data_Symbol_Count * 29 < Field_0):
 				Data_Symbol_Count += 1
-			print(f'Data Symbol Count: {Data_Symbol_Count}')
 			Decoded_Packet = []
 			for Data_Symbol_Index in range(Data_Symbol_Count):
 				Start_i += (fft_n + cp_n)
