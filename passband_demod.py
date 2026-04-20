@@ -167,7 +167,7 @@ def print_frame(frame, crc_val):
 			if frame_index < frame_len:
 				print("%2X" % frame[frame_index], end=' ')
 				frame_index += 1
-		print('\r\n', end='', flush=True)
+		print('\n', end='', flush=True)
 
 def DecodeQPSK(symbol, pilots):
 	# Occupied subcarriers: 26 thru 145 inclusive
@@ -285,7 +285,6 @@ def CalcEqDecodeBPSK(preamble_fft, ref_fft):
 		if BPSK_data_word[i] == 1:
 			sync_field_0 += data_word
 		data_word >>= 1
-	print(f'Sync Field 0, {sync_field_0}')
 	if sync_field_0 > 1000:
 		sync_field_0 = 50
 		print(f'Forced short sync field')
@@ -701,16 +700,20 @@ def main():
 				Symbol_Baseband = PilotEqualize2(pilots, Symbol_Baseband)
 				Decoded_Packet.extend(DecodeQPSK(Symbol_Baseband,pilots))
 			Decoded_Packet = Decoded_Packet[:Field_0]
-			FCS = crc.CalcCRC16(Decoded_Packet)
-			print_frame(Decoded_Packet, FCS)
-			header_length = print_ax25_header(Decoded_Packet, ',')
-			frame_string = ""
-			for byte in Decoded_Packet[header_length:]:
-				if (byte < 0x7F) and (byte > 0x1F):
-					frame_string += chr(int(byte))
-				else:
-					frame_string += f'<{hex(int(byte))}>'
-			print(frame_string)
+			calc_crc = crc.CalcCRC16Int(Decoded_Packet[:-2])
+			carried_crc = (Decoded_Packet[-1]<<8) + Decoded_Packet[-2]
+			if calc_crc == carried_crc:
+				print_frame(Decoded_Packet[:-2], hex(carried_crc))
+				header_length = print_ax25_header(Decoded_Packet[:-2], ',')
+				frame_string = ""
+				for byte in Decoded_Packet[header_length:-2]:
+					if (byte < 0x7F) and (byte > 0x1F):
+						frame_string += chr(int(byte))
+					else:
+						frame_string += f'<{hex(int(byte))}>'
+				print(frame_string)
+			else:
+				print(f'Frame carried CRC: {carried_crc:X}, calculated {calc_crc:X}')
 
 
 
